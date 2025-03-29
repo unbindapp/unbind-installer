@@ -165,16 +165,62 @@ install_cilium() {
     # Wait for Cilium to be ready
     sleep 30
     
-    # Configure Cilium LoadBalancer IP Pool
-    cat <<EOF | kubectl apply -f -
-apiVersion: "cilium.io/v2alpha1"
+    # Generate individual IP entries for the LoadBalancer IP Pool
+    # Convert start IP to a number using awk (more portable than bash bit shifting)
+    START_NUM=$(echo "$LB_START_IP" | awk -F. '{print ($1 * 256^3) + ($2 * 256^2) + ($3 * 256) + $4}')
+    END_NUM=$(echo "$LB_END_IP" | awk -F. '{print ($1 * 256^3) + ($2 * 256^2) + ($3 * 256) + $4}')
+    
+    # Create the YAML header
+    POOL_YAML="apiVersion: \"cilium.io/v2alpha1\"
 kind: CiliumLoadBalancerIPPool
 metadata:
-  name: "default-pool"
+  name: \"default-pool\"
 spec:
-  cidrs:
-  - cidr: "${LB_START_IP}/32-${LB_END_IP}/32"
-EOF
+  cidrs:"
+    
+    # Add each IP in the range using a simpler approach with seq
+    CURRENT_IP=$LB_START_IP
+    while true; do
+        # Add the current IP to the YAML
+        POOL_YAML+="
+  - cidr: \"$CURRENT_IP/32\""
+        
+        # Check if we've reached the end IP
+        if [ "$CURRENT_IP" = "$LB_END_IP" ]; then
+            break
+        fi
+        
+        # Calculate the next IP
+        # Split the IP into octets
+        IFS='.' read -r -a IP_PARTS <<< "$CURRENT_IP"
+        
+        # Increment the last octet
+        IP_PARTS[3]=$((IP_PARTS[3] + 1))
+        
+        # If the last octet overflows, increment the previous one
+        if [ ${IP_PARTS[3]} -eq 256 ]; then
+            IP_PARTS[3]=0
+            IP_PARTS[2]=$((IP_PARTS[2] + 1))
+            
+            # If the third octet overflows, increment the second one
+            if [ ${IP_PARTS[2]} -eq 256 ]; then
+                IP_PARTS[2]=0
+                IP_PARTS[1]=$((IP_PARTS[1] + 1))
+                
+                # If the second octet overflows, increment the first one
+                if [ ${IP_PARTS[1]} -eq 256 ]; then
+                    IP_PARTS[1]=0
+                    IP_PARTS[0]=$((IP_PARTS[0] + 1))
+                fi
+            fi
+        fi
+        
+        # Reconstruct the IP
+        CURRENT_IP="${IP_PARTS[0]}.${IP_PARTS[1]}.${IP_PARTS[2]}.${IP_PARTS[3]}"
+    done
+    
+    # Apply the generated YAML
+    echo "$POOL_YAML" | kubectl apply -f -
     
     # Verify Cilium status
     cilium status --wait
@@ -330,6 +376,13 @@ main() {
     
     # Print summary
     log "K3S installation completed successfully"
+    log "Cilium LoadBalancer IP range: ${LB_START_IP}-${LB_END_IP}"
+    log "Namespaces created: unbind-system, ingress-nginx (Cilium installed in kube-system)"
+    log "KUBECONFIG is available at: /etc/rancher/k3s/k3s.yaml"
+    log "To use kubectl with this cluster, you can either:"
+    log "  1. Run commands as root (sudo kubectl get pods)"
+    log "  2. Copy KUBECONFIG to your user: mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown $(id -u):$(id -g) ~/.kube/config"
+    log "To verify LoadBalancer functionality, create a service of type LoadBalancer"
 }
 
 # Run main function
