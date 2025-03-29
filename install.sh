@@ -63,128 +63,88 @@ install_prerequisites() {
 install_k3s() {
     log "Installing K3S..."
     
-    # Set up K3S installation environment variables
-    export INSTALL_K3S_EXEC="--disable=traefik --disable=servicelb"
-    export INSTALL_K3S_SKIP_ENABLE="true"  # Don't enable auto-updates
+    # Set up K3S installation environment variables with flannel disabled and traefik disabled
+    export INSTALL_K3S_EXEC='--flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb'
     
     # Download and run K3S install script
     curl -sfL https://get.k3s.io | sh -
     
-    # Enable but don't start K3S service (we'll start it after additional configuration)
-    systemctl enable k3s
-    
     log "K3S installed successfully"
-}
-
-# Function to detect suitable IP range for load balancers
-detect_ip_range() {
-    log "Detecting IP range for Cilium LoadBalancer..."
-    
-    # Get the primary interface
-    PRIMARY_INTERFACE=$(ip route | grep default | awk '{print $5}')
-    
-    if [ -z "$PRIMARY_INTERFACE" ]; then
-        log_warning "Could not detect primary interface, trying to find any interface with an IP"
-        PRIMARY_INTERFACE=$(ip -o -4 addr show | grep -v "127.0.0.1" | awk '{print $2}' | head -n 1)
-        
-        if [ -z "$PRIMARY_INTERFACE" ]; then
-            log_error "Could not detect any network interface with an IP address"
-        fi
-    fi
-    
-    log "Detected primary interface: $PRIMARY_INTERFACE"
-    
-    # Get the subnet address
-    SUBNET_INFO=$(ip -o -4 addr show "$PRIMARY_INTERFACE" | awk '{print $4}')
-    
-    if [ -z "$SUBNET_INFO" ]; then
-        log_error "Could not detect subnet information for interface $PRIMARY_INTERFACE"
-    fi
-    
-    # Extract network address and prefix
-    NETWORK_ADDR=$(echo "$SUBNET_INFO" | cut -d'/' -f1)
-    PREFIX=$(echo "$SUBNET_INFO" | cut -d'/' -f2)
-    
-    log "Network address: $NETWORK_ADDR, Prefix: $PREFIX"
-    
-    # Calculate base address for the range
-    IFS='.' read -r -a IP_PARTS <<< "$NETWORK_ADDR"
-    
-    # Set a default range of 10 IPs at the upper end of the subnet
-    START_IP="${IP_PARTS[0]}.${IP_PARTS[1]}.${IP_PARTS[2]}.240"
-    END_IP="${IP_PARTS[0]}.${IP_PARTS[1]}.${IP_PARTS[2]}.250"
-    
-    log "Calculated IP range for LoadBalancer: $START_IP-$END_IP"
-    
-    # Export variables to be used later
-    export LB_START_IP=$START_IP
-    export LB_END_IP=$END_IP
 }
 
 # Function to install and configure Cilium
 install_cilium() {
-    log "Installing Cilium..."
+    log "Installing Cilium CLI..."
+    
+    # Install Cilium CLI exactly as in the guide
+    CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
+    CLI_ARCH=amd64
+    if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
+    curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
+    sha256sum --check cilium-linux-${CLI_ARCH}.tar.gz.sha256sum
+    tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
+    rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
+    
+    log "Cilium CLI installed successfully"
+    
+    # Set KUBECONFIG
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
     
     # Wait for K3S to be ready
     sleep 10
     
-    # Install Cilium CLI
-    CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
-    CLI_ARCH=amd64
-    if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
-    curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-linux-${CLI_ARCH}.tar.gz
-    tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
-    rm cilium-linux-${CLI_ARCH}.tar.gz
-    
-    # Install Helm (required for Cilium installation)
-    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-    
-    # Add Cilium Helm repository
-    helm repo add cilium https://helm.cilium.io/
-    helm repo update
-    
-    # Install Cilium with LoadBalancer capability
-    helm install cilium cilium/cilium --version 1.15.1 \
-      --namespace kube-system \
-      --set kubeProxyReplacement=strict \
-      --set k8sServiceHost=$(hostname -I | awk '{print $1}') \
-      --set k8sServicePort=6443 \
-      --set externalIPs.enabled=true \
-      --set nodePort.enabled=true \
-      --set hostPort.enabled=true \
-      --set bpf.masquerade=true \
-      --set ipam.mode=kubernetes \
-      --set loadBalancer.mode=dsr \
+    log "Installing Cilium..."
+    # Install Cilium using the CLI with correct K3S PodCIDR and LoadBalancer configuration
+    cilium install --version 1.17.2 \
+      --set ipam.operator.clusterPoolIPv4PodCIDRList="10.42.0.0/16" \
+      --set kubeProxyReplacement=true \
+      --set loadBalancer.standalone=true \
       --set loadBalancer.algorithm=maglev \
-      --set loadBalancer.acceleration=native \
-      --set loadBalancer.serviceTopology=true \
-      --set ipv4NativeRoutingCIDR="10.0.0.0/8" \
-      --set ipv4.enabled=true \
-      --set ipv6.enabled=false
+      --set bpf.masquerade=true
     
     # Wait for Cilium to be ready
-    sleep 30
+    log "Waiting for Cilium to be ready..."
+    cilium status --wait
     
-    # Create a simplified IP pool definition with CIDR block instead of individual IPs
-    # Calculate the network CIDR that includes our range
-    # Extract the first three octets of the start IP
-    NETWORK_PREFIX=$(echo "$LB_START_IP" | cut -d. -f1-3)
+    log "Cilium installed successfully"
     
-    # Create the Cilium LoadBalancer IP Pool with a /24 subnet
+    # Configure the Cilium LoadBalancer IP pool
+    log "Configuring Cilium LoadBalancer IP pool..."
+    
+    # Get network info directly using ip command to ensure proper format
+    PRIMARY_INTERFACE=$(ip route | grep default | awk '{print $5}')
+    if [ -z "$PRIMARY_INTERFACE" ]; then
+        PRIMARY_INTERFACE=$(ip -o -4 addr show | grep -v "127.0.0.1" | head -n 1 | awk '{print $2}')
+    fi
+    
+    # Get IP address and network
+    NETWORK_INFO=$(ip -o -4 addr show "$PRIMARY_INTERFACE" | awk '{print $4}' | head -n 1)
+    NETWORK_PREFIX=$(echo "$NETWORK_INFO" | cut -d'/' -f1 | awk -F. '{print $1"."$2"."$3}')
+    
+    # Create a range of IPs for the LB
+    START_IP="${NETWORK_PREFIX}.240"
+    END_IP="${NETWORK_PREFIX}.250"
+    
+    # Store the range for later use
+    export LB_RANGE="${START_IP}-${END_IP}"
+    
+    # Create Cilium LoadBalancer IP Pool using the correct structure for Cilium 1.17.2
     cat <<EOF | kubectl apply -f -
 apiVersion: "cilium.io/v2alpha1"
 kind: CiliumLoadBalancerIPPool
 metadata:
   name: "default-pool"
 spec:
-  cidrs:
-  - cidr: "${NETWORK_PREFIX}.0/24"
+  blocks:
+  - start: "${START_IP}"
+    end: "${END_IP}"
 EOF
     
-    # Verify Cilium status
-    cilium status --wait
+    log "Cilium LoadBalancer IP pool configured with range: $LB_RANGE"
     
-    log "Cilium installed and configured successfully with LoadBalancer IP pool: ${NETWORK_PREFIX}.0/24"
+    # Run Cilium connectivity test
+    log "Running Cilium connectivity test..."
+    cilium connectivity test || log_warning "Connectivity test failed, but continuing installation"
 }
 
 # Function to create unbind-system namespace
@@ -209,6 +169,9 @@ install_nginx_ingress() {
     
     # Wait for NGINX Ingress Controller to be ready
     sleep 30
+    
+    # Add annotation to the LoadBalancer service to use our Cilium IP Pool
+    kubectl annotate service -n ingress-nginx ingress-nginx-controller "io.cilium/lb-ipam-ips=$(echo $LB_RANGE | cut -d'-' -f1)" --overwrite
     
     log "NGINX Ingress Controller installed successfully"
 }
@@ -283,6 +246,8 @@ kind: Service
 metadata:
   name: test-lb-svc
   namespace: default
+  annotations:
+    io.cilium/lb-ipam-ips: "$(echo $LB_RANGE | cut -d'-' -f1)"
 spec:
   type: LoadBalancer
   ports:
@@ -316,14 +281,7 @@ main() {
     check_root
     detect_os
     install_prerequisites
-    detect_ip_range
     install_k3s
-    
-    # Start K3S service
-    systemctl start k3s
-    
-    # Wait for K3S to be ready
-    sleep 30
     
     # Set KUBECONFIG environment variable
     export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
@@ -335,6 +293,13 @@ main() {
     
     # Print summary
     log "K3S installation completed successfully"
+    log "Cilium LoadBalancer IP pool: ${LB_RANGE}"
+    log "Namespaces created: unbind-system, ingress-nginx (Cilium installed in kube-system)"
+    log "KUBECONFIG is available at: /etc/rancher/k3s/k3s.yaml"
+    log "To use kubectl with this cluster, you can either:"
+    log "  1. Run commands as root (sudo kubectl get pods)"
+    log "  2. Copy KUBECONFIG to your user: mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown $(id -u):$(id -g) ~/.kube/config"
+    log "To verify LoadBalancer functionality, create a service of type LoadBalancer"
 }
 
 # Run main function
