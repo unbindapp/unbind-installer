@@ -55,8 +55,3 @@ func getBanner() string {
 
 	return banner
 }
-
-// getTitle returns the application title with version
-func getTitle() string {
-	return fmt.Sprintf("Unbind Installer v%s", config.VERSION)
-}

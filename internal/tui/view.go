@@ -12,7 +12,8 @@ import (
 // viewLoading shows the loading screen
 func viewLoading(m Model) string {
 	s := strings.Builder{}
-	s.WriteString(m.styles.Title.Render(getTitle()))
+	// Banner
+	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 	s.WriteString(m.spinner.View())
 	s.WriteString(" ")
@@ -26,7 +27,8 @@ func viewLoading(m Model) string {
 // viewError shows the error screen
 func viewError(m Model) string {
 	s := strings.Builder{}
-	s.WriteString(m.styles.Title.Render(getTitle()))
+	// Banner
+	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 
 	if errors.Is(m.err, errdefs.ErrNotLinux) {
@@ -62,8 +64,8 @@ func viewError(m Model) string {
 func viewOSInfo(m Model) string {
 	s := strings.Builder{}
 
-	// Title
-	s.WriteString(m.styles.Title.Render(getTitle()))
+	// Banner
+	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 
 	// OS Pretty Name (if available)

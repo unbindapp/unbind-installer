@@ -9,8 +9,8 @@ import (
 func viewInstallingPackages(m Model) string {
 	s := strings.Builder{}
 
-	// Title
-	s.WriteString(m.styles.Title.Render(getTitle()))
+	// Banner
+	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 
 	// Show current action

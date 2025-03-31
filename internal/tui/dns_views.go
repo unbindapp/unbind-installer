@@ -13,8 +13,8 @@ import (
 func viewDetectingIPs(m Model) string {
 	s := strings.Builder{}
 
-	// Title
-	s.WriteString(m.styles.Title.Render(getTitle()))
+	// Banner
+	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 
 	// Show current action
@@ -57,8 +57,8 @@ func viewDetectingIPs(m Model) string {
 func viewDNSConfig(m Model) string {
 	s := strings.Builder{}
 
-	// Title
-	s.WriteString(m.styles.Title.Render(getTitle()))
+	// Banner
+	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 
 	// Instructions
@@ -123,8 +123,8 @@ func viewDNSConfig(m Model) string {
 func viewDNSValidation(m Model) string {
 	s := strings.Builder{}
 
-	// Title
-	s.WriteString(m.styles.Title.Render(getTitle()))
+	// Banner
+	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 
 	// Show current action
@@ -221,8 +221,8 @@ func viewDNSSuccess(m Model) string {
 func viewDNSFailed(m Model) string {
 	s := strings.Builder{}
 
-	// Title
-	s.WriteString(m.styles.Title.Render(getTitle()))
+	// Banner
+	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 
 	// Error message
