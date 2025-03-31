@@ -42,3 +42,5 @@ type dnsValidationCompleteMsg struct {
 type dnsValidationTimeoutMsg struct{}
 
 type manualContinueMsg struct{}
+
+type k3sInstallCompleteMsg struct{}

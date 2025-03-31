@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
+	"github.com/unbindapp/unbind-installer/internal/k3s"
 	"github.com/unbindapp/unbind-installer/internal/network"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"github.com/unbindapp/unbind-installer/internal/pkgmanager"
@@ -144,9 +145,18 @@ func dnsValidationTimeout(duration time.Duration) tea.Cmd {
 	})
 }
 
-// autoAdvanceAfter creates a command that waits for the specified duration then sends an autoAdvanceMsg
-func autoAdvanceAfter(duration time.Duration) tea.Cmd {
-	return tea.Tick(duration, func(time.Time) tea.Msg {
-		return autoAdvanceMsg{}
-	})
+// installK3S is a command that installs K3S
+func (m Model) installK3S() tea.Cmd {
+	return func() tea.Msg {
+		// Create a new K3S installer
+		installer := k3s.NewInstaller(m.logChan)
+
+		// Install K3S
+		err := installer.Install()
+		if err != nil {
+			return errMsg{err}
+		}
+
+		return k3sInstallCompleteMsg{}
+	}
 }

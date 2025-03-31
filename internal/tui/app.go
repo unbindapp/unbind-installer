@@ -135,6 +135,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateDebugLogsState(msg)
 	case StateError:
 		return m.updateErrorState(msg)
+	case StateInstallingK3S:
+		return m.updateInstallingK3SState(msg)
 	default:
 		return m, m.listenForLogs()
 	}
@@ -167,6 +169,8 @@ func (m Model) View() string {
 		return viewDNSFailed(m)
 	case StateDebugLogs:
 		return viewDebugLogs(m)
+	case StateInstallingK3S:
+		return viewInstallingK3S(m)
 	default:
 		return viewWelcome(m)
 	}

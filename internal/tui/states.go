@@ -19,12 +19,7 @@ const (
 	StateDNSValidation
 	StateDNSSuccess
 	StateDNSFailed
-
-	// Add new states here as you expand the application
-	// StateConfigureNetwork
-	// StateConfigureStorage
-	// StateDeployingServices
-	// etc.
+	StateInstallingK3S
 )
 
 // Additional model fields for DNS setup

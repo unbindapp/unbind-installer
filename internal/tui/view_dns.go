@@ -251,12 +251,20 @@ func (m Model) updateDNSValidationState(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if msg.success {
 			m.state = StateDNSSuccess
+			m.isLoading = false
+
+			// Schedule automatic advancement after 3 seconds
+			return m, tea.Batch(
+				m.listenForLogs(),
+				tea.Tick(1*time.Second, func(time.Time) tea.Msg {
+					return autoAdvanceMsg{}
+				}),
+			)
 		} else {
 			m.state = StateDNSFailed
+			m.isLoading = false
+			return m, m.listenForLogs()
 		}
-
-		m.isLoading = false
-		return m, m.listenForLogs()
 
 	case dnsValidationTimeoutMsg:
 		m.dnsInfo.ValidationDuration = time.Since(m.dnsInfo.TestingStartTime)
@@ -325,14 +333,28 @@ func viewDNSSuccess(m Model) string {
 }
 
 func (m Model) updateDNSSuccessState(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if keyMsg.String() == "enter" {
-			// Continue to the next step after successful DNS validation
-			return m, tea.Quit
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if msg.String() == "enter" {
+			// Start K3S installation
+			m.state = StateInstallingK3S
+			m.isLoading = true
+			return m, tea.Batch(
+				m.spinner.Tick,
+				m.installK3S(),
+				m.listenForLogs(),
+			)
 		}
-	}
-
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+	case autoAdvanceMsg:
+		// Auto-advance to K3S installation
+		m.state = StateInstallingK3S
+		m.isLoading = true
+		return m, tea.Batch(
+			m.spinner.Tick,
+			m.installK3S(),
+			m.listenForLogs(),
+		)
+	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 	}
