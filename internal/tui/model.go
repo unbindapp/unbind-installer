@@ -2,10 +2,13 @@ package tui
 
 import (
 	"os"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
+	"github.com/unbindapp/unbind-installer/internal/network"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"github.com/unbindapp/unbind-installer/internal/pkgmanager"
 )
@@ -21,7 +24,24 @@ const (
 	StateInstallingPackages
 	StateInstallComplete
 	StateError
+	StateDetectingIPs
+	StateDNSConfig
+	StateDNSValidation
+	StateDNSSuccess
+	StateDNSFailed
 )
+
+// Additional model fields for DNS setup
+type dnsInfo struct {
+	InternalIP         string
+	ExternalIP         string
+	Domain             string
+	ValidationStarted  bool
+	ValidationSuccess  bool
+	CloudflareDetected bool
+	TestingStartTime   time.Time
+	ValidationDuration time.Duration
+}
 
 // Model represents the application state
 type Model struct {
@@ -35,6 +55,8 @@ type Model struct {
 	styles      Styles
 	logMessages []string
 	logChan     chan string
+	dnsInfo     *dnsInfo
+	domainInput textinput.Model
 }
 
 // NewModel initializes a new Model
@@ -50,6 +72,9 @@ func NewModel() Model {
 
 	logChan := make(chan string, 100) // Buffer for log messages
 
+	// Initialize domain input
+	domainInput := initializeDomainInput()
+
 	return Model{
 		state:       StateWelcome,
 		spinner:     s,
@@ -57,6 +82,7 @@ func NewModel() Model {
 		styles:      styles,
 		logMessages: []string{},
 		logChan:     logChan,
+		domainInput: domainInput,
 	}
 }
 
@@ -106,6 +132,24 @@ type installPackagesMsg struct{}
 
 type installCompleteMsg struct{}
 
+// DNS-related messages
+type detectIPsMsg struct{}
+
+type detectIPsCompleteMsg struct {
+	ipInfo *network.IPInfo
+}
+
+type dnsValidationMsg struct{}
+
+type dnsValidationCompleteMsg struct {
+	success    bool
+	cloudflare bool
+}
+
+type dnsValidationTimeoutMsg struct{}
+
+type manualContinueMsg struct{}
+
 // installRequiredPackages is a command that installs the required packages
 func (m Model) installRequiredPackages() tea.Cmd {
 	return func() tea.Msg {
@@ -130,8 +174,84 @@ func (m Model) installRequiredPackages() tea.Cmd {
 	}
 }
 
+// startDetectingIPs starts the IP detection process
+func (m Model) startDetectingIPs() tea.Cmd {
+	return func() tea.Msg {
+		if m.dnsInfo == nil {
+			m.dnsInfo = &dnsInfo{}
+		}
+
+		ipInfo, err := network.DetectIPs(func(msg string) {
+			m.logChan <- msg
+		})
+
+		if err != nil {
+			m.logChan <- "Error detecting IPs: " + err.Error()
+		}
+
+		return detectIPsCompleteMsg{ipInfo: ipInfo}
+	}
+}
+
+// startDNSValidation starts the DNS validation process
+func (m Model) startDNSValidation() tea.Cmd {
+	return func() tea.Msg {
+		if m.dnsInfo == nil || m.dnsInfo.Domain == "" {
+			return errMsg{err: nil}
+		}
+
+		// Log the validation attempt
+		m.logChan <- "Starting DNS validation..."
+
+		// Check for Cloudflare first
+		cloudflare := network.CheckCloudflareProxy(m.dnsInfo.Domain, func(msg string) {
+			m.logChan <- msg
+		})
+
+		// If Cloudflare is detected, consider it successful
+		if cloudflare {
+			return dnsValidationCompleteMsg{
+				success:    true,
+				cloudflare: true,
+			}
+		}
+
+		// Otherwise test the wildcard DNS configuration
+		success := network.TestWildcardDNS(m.dnsInfo.Domain, m.dnsInfo.ExternalIP, func(msg string) {
+			m.logChan <- msg
+		})
+
+		return dnsValidationCompleteMsg{
+			success:    success,
+			cloudflare: false,
+		}
+	}
+}
+
+// dnsValidationTimeout creates a timeout for DNS validation
+func dnsValidationTimeout(duration time.Duration) tea.Cmd {
+	return tea.Tick(duration, func(time.Time) tea.Msg {
+		return dnsValidationTimeoutMsg{}
+	})
+}
+
 // Update handles messages and user input
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle text input for domain entry
+	if m.state == StateDNSConfig {
+		var cmd tea.Cmd
+		m.domainInput, cmd = m.domainInput.Update(msg)
+
+		// Store the domain value
+		if m.dnsInfo == nil {
+			m.dnsInfo = &dnsInfo{}
+		}
+		m.dnsInfo.Domain = m.domainInput.Value()
+
+		cmds := []tea.Cmd{cmd, m.listenForLogs()}
+		return m, tea.Batch(cmds...)
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -159,8 +279,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.listenForLogs(),
 				)
 			} else if m.state == StateInstallComplete {
-				// When Enter is pressed on the install complete screen, exit
+				// Start IP detection for DNS configuration
+				m.state = StateDetectingIPs
+				m.isLoading = true
+				return m, tea.Batch(
+					m.spinner.Tick,
+					m.startDetectingIPs(),
+					m.listenForLogs(),
+				)
+			} else if m.state == StateDNSConfig {
+				// Start DNS validation
+				if m.dnsInfo != nil && m.dnsInfo.Domain != "" {
+					m.state = StateDNSValidation
+					m.isLoading = true
+					m.dnsInfo.ValidationStarted = true
+					m.dnsInfo.TestingStartTime = time.Now()
+
+					return m, tea.Batch(
+						m.spinner.Tick,
+						m.startDNSValidation(),
+						dnsValidationTimeout(30*time.Second), // 30-second timeout
+						m.listenForLogs(),
+					)
+				}
+			} else if m.state == StateDNSSuccess || m.state == StateDNSFailed {
+				// Continue to the next step
 				return m, tea.Quit
+			}
+		case "r":
+			if m.state == StateDNSFailed {
+				// Retry DNS validation
+				m.state = StateDNSValidation
+				m.isLoading = true
+				m.dnsInfo.ValidationStarted = true
+				m.dnsInfo.TestingStartTime = time.Now()
+
+				return m, tea.Batch(
+					m.spinner.Tick,
+					m.startDNSValidation(),
+					dnsValidationTimeout(30*time.Second),
+					m.listenForLogs(),
+				)
+			}
+		case "c":
+			if m.state == StateDNSFailed {
+				// Go back to DNS configuration
+				m.state = StateDNSConfig
+				m.isLoading = false
+
+				// Reset domain input
+				m.domainInput.SetValue("")
+				m.domainInput.Focus()
+
+				return m, m.listenForLogs()
 			}
 		}
 
@@ -202,6 +373,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateInstallComplete
 		m.isLoading = false
 		return m, m.listenForLogs()
+
+	case detectIPsCompleteMsg:
+		m.state = StateDNSConfig
+		m.isLoading = false
+
+		// Initialize DNS info if needed
+		if m.dnsInfo == nil {
+			m.dnsInfo = &dnsInfo{}
+		}
+
+		// Store the detected IPs
+		if msg.ipInfo != nil {
+			m.dnsInfo.InternalIP = msg.ipInfo.InternalIP
+			m.dnsInfo.ExternalIP = msg.ipInfo.ExternalIP
+		}
+
+		// Focus the domain input field
+		m.domainInput.Focus()
+
+		return m, m.listenForLogs()
+
+	case dnsValidationCompleteMsg:
+		m.dnsInfo.ValidationSuccess = msg.success
+		m.dnsInfo.CloudflareDetected = msg.cloudflare
+		m.dnsInfo.ValidationDuration = time.Since(m.dnsInfo.TestingStartTime)
+
+		if msg.success {
+			m.state = StateDNSSuccess
+		} else {
+			m.state = StateDNSFailed
+		}
+
+		m.isLoading = false
+		return m, m.listenForLogs()
+
+	case dnsValidationTimeoutMsg:
+		if m.state == StateDNSValidation {
+			m.dnsInfo.ValidationDuration = time.Since(m.dnsInfo.TestingStartTime)
+			m.state = StateDNSFailed
+			m.isLoading = false
+			m.logChan <- "DNS validation timed out after 30 seconds"
+		}
+		return m, m.listenForLogs()
 	}
 
 	return m, m.listenForLogs()
@@ -222,7 +436,26 @@ func (m Model) View() string {
 		return viewInstallingPackages(m)
 	case StateInstallComplete:
 		return viewInstallComplete(m)
+	case StateDetectingIPs:
+		return viewDetectingIPs(m)
+	case StateDNSConfig:
+		return viewDNSConfig(m)
+	case StateDNSValidation:
+		return viewDNSValidation(m)
+	case StateDNSSuccess:
+		return viewDNSSuccess(m)
+	case StateDNSFailed:
+		return viewDNSFailed(m)
 	default:
 		return viewWelcome(m)
 	}
+}
+
+// UpdateDomain updates the domain in the DNS info
+func (m *Model) UpdateDomain(domain string) {
+	if m.dnsInfo == nil {
+		m.dnsInfo = &dnsInfo{}
+	}
+	m.dnsInfo.Domain = domain
+	m.domainInput.SetValue(domain)
 }
