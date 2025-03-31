@@ -10,6 +10,7 @@ type ErrorType int
 // Errors
 var (
 	ErrNotRoot                     = errors.New("This installer must be run with root privileges")
+	ErrK3sInstallFailed            = NewCustomError(ErrTypeK3sInstallFailed, "")
 	ErrNotLinux                    = NewCustomError(ErrTypeNotLinux, "")
 	ErrDistributionDetectionFailed = NewCustomError(ErrTypeDistributionDetectionFailed, "")
 	ErrUnsupportedDistribution     = NewCustomError(ErrTypeUnsupportedDistribution, "")
@@ -22,6 +23,7 @@ const (
 	ErrTypeDistributionDetectionFailed
 	ErrTypeUnsupportedDistribution
 	ErrTypeUnsupportedVersion
+	ErrTypeK3sInstallFailed
 )
 
 var errorTypeStrings = map[ErrorType]string{
@@ -29,6 +31,7 @@ var errorTypeStrings = map[ErrorType]string{
 	ErrTypeDistributionDetectionFailed: "ErrDistributionDetectionFailed",
 	ErrTypeUnsupportedDistribution:     "ErrUnsupportedDistribution",
 	ErrTypeUnsupportedVersion:          "ErrUnsupportedVersion",
+	ErrTypeK3sInstallFailed:            "ErrK3sInstallFailed",
 }
 
 func (e ErrorType) String() string {

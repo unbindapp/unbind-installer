@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -51,31 +52,52 @@ func (i *Installer) Install() error {
 	installCmd := exec.Command("/bin/sh", "/tmp/k3s-installer.sh")
 	installCmd.Env = append(os.Environ(), fmt.Sprintf("INSTALL_K3S_EXEC=%s", k3sInstallFlags))
 	installOutput, err := installCmd.CombinedOutput()
+	installOutputStr := string(installOutput)
+	i.log(fmt.Sprintf("Installation output: %s", installOutputStr))
+
 	if err != nil {
-		i.log(fmt.Sprintf("Error installing K3S: %s", string(installOutput)))
+		i.log(fmt.Sprintf("Error installing K3S: %s", installOutputStr))
 		return fmt.Errorf("failed to install K3S: %w", err)
 	}
 
-	i.log("K3S installed successfully")
+	// Check if the service is active
+	i.log("Checking K3S service status...")
+	time.Sleep(5 * time.Second) // Give the service time to start
+
+	checkCmd := exec.Command("systemctl", "is-active", "k3s.service")
+	statusOutput, err := checkCmd.CombinedOutput()
+	statusStr := strings.TrimSpace(string(statusOutput))
+
+	if err != nil || statusStr != "active" {
+		// If service is not active, check the service status for detailed error
+		i.log("K3S service is not active, checking for errors...")
+
+		journalCmd := exec.Command("journalctl", "-n", "20", "-u", "k3s.service")
+		journalOutput, _ := journalCmd.CombinedOutput()
+		i.log(fmt.Sprintf("K3S service logs: %s", string(journalOutput)))
+
+		return fmt.Errorf("K3S service failed to start: %s", statusStr)
+	}
+
+	i.log("K3S installed and service is running successfully")
 
 	// Set KUBECONFIG environment variable
 	i.log("Setting KUBECONFIG environment variable...")
 	os.Setenv("KUBECONFIG", "/etc/rancher/k3s/k3s.yaml")
 
-	// Wait for K3S to be ready
-	i.log("Waiting for K3S to be ready...")
-	time.Sleep(10 * time.Second)
+	// Verify k3s is working by checking nodes
+	i.log("Verifying K3S installation by checking nodes...")
+	kubeCmd := exec.Command("k3s", "kubectl", "get", "nodes")
+	kubeOutput, err := kubeCmd.CombinedOutput()
 
-	// Check if K3S is running
-	i.log("Checking K3S status...")
-	checkCmd := exec.Command("systemctl", "is-active", "k3s")
-	checkOutput, err := checkCmd.CombinedOutput()
 	if err != nil {
-		i.log(fmt.Sprintf("K3S service might not be running: %s", string(checkOutput)))
-		return fmt.Errorf("K3S service not active: %w", err)
+		i.log(fmt.Sprintf("Error checking K3S nodes: %s", string(kubeOutput)))
+		return fmt.Errorf("K3S installed but not functioning correctly: %w", err)
 	}
 
-	i.log("K3S is running")
+	i.log(fmt.Sprintf("K3S nodes: %s", string(kubeOutput)))
+	i.log("K3S installation verified successfully")
+
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -154,7 +155,8 @@ func (m Model) installK3S() tea.Cmd {
 		// Install K3S
 		err := installer.Install()
 		if err != nil {
-			return errMsg{err}
+			m.logChan <- fmt.Sprintf("K3S installation failed: %s", err.Error())
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}
 		}
 
 		return k3sInstallCompleteMsg{}

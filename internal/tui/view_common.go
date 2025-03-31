@@ -89,6 +89,15 @@ func viewError(m Model) string {
 		s.WriteString(m.styles.Error.Render("Sorry, I couldn't detect your Linux distribution!"))
 	} else if errors.Is(m.err, errdefs.ErrNotRoot) {
 		s.WriteString(m.styles.Error.Render("Sorry, this installer must be run with root privileges!"))
+	} else if errors.Is(m.err, errdefs.ErrK3sInstallFailed) {
+		s.WriteString(m.styles.Error.Render("Sorry, the K3s installation failed!"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details."))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Error.Render(fmt.Sprintf("Error message %s", m.err.Error())))
+	} else if m.err != nil {
+		s.WriteString(m.styles.Error.Render(fmt.Sprintf("An error occurred: %v", m.err)))
+
 	} else {
 		s.WriteString(m.styles.Error.Render(fmt.Sprintf("Unknown error: %v", m.err)))
 	}
