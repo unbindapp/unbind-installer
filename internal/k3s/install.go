@@ -55,48 +55,111 @@ func (i *Installer) Install() error {
 	installOutputStr := string(installOutput)
 	i.log(fmt.Sprintf("Installation output: %s", installOutputStr))
 
+	// Even if the installer completes successfully, the service might fail to start
+	// Check for specific failure messages in the output
+	if strings.Contains(installOutputStr, "Job for k3s.service failed") {
+		i.log("Detected k3s.service failure in the installation output")
+
+		// Get detailed service status
+		statusCmd := exec.Command("systemctl", "status", "k3s.service")
+		statusOutput, _ := statusCmd.CombinedOutput()
+		i.log(fmt.Sprintf("K3S service status: %s", string(statusOutput)))
+
+		// Get journal logs
+		journalCmd := exec.Command("journalctl", "-n", "20", "-u", "k3s.service")
+		journalOutput, _ := journalCmd.CombinedOutput()
+		i.log(fmt.Sprintf("K3S service logs: %s", string(journalOutput)))
+
+		return fmt.Errorf("K3S service failed to start after installation")
+	}
+
 	if err != nil {
 		i.log(fmt.Sprintf("Error installing K3S: %s", installOutputStr))
 		return fmt.Errorf("failed to install K3S: %w", err)
 	}
 
-	// Check if the service is active
-	i.log("Checking K3S service status...")
-	time.Sleep(5 * time.Second) // Give the service time to start
+	// Wait longer for the service to be fully up
+	i.log("Waiting for K3S service to start (this may take up to 30 seconds)...")
 
-	checkCmd := exec.Command("systemctl", "is-active", "k3s.service")
-	statusOutput, err := checkCmd.CombinedOutput()
-	statusStr := strings.TrimSpace(string(statusOutput))
+	// Try multiple times to check if the service is active
+	maxRetries := 6
+	for retry := 0; retry < maxRetries; retry++ {
+		time.Sleep(5 * time.Second)
 
-	if err != nil || statusStr != "active" {
-		// If service is not active, check the service status for detailed error
-		i.log("K3S service is not active, checking for errors...")
+		i.log(fmt.Sprintf("Checking K3S service status (attempt %d/%d)...", retry+1, maxRetries))
+		checkCmd := exec.Command("systemctl", "is-active", "k3s.service")
+		statusOutput, _ := checkCmd.CombinedOutput()
+		statusStr := strings.TrimSpace(string(statusOutput))
 
-		journalCmd := exec.Command("journalctl", "-n", "20", "-u", "k3s.service")
-		journalOutput, _ := journalCmd.CombinedOutput()
-		i.log(fmt.Sprintf("K3S service logs: %s", string(journalOutput)))
+		if statusStr == "active" {
+			i.log("K3S service is now active")
+			break
+		}
 
-		return fmt.Errorf("K3S service failed to start: %s", statusStr)
+		if retry == maxRetries-1 {
+			i.log("K3S service failed to become active after multiple attempts")
+
+			// Get detailed service status
+			statusCmd := exec.Command("systemctl", "status", "k3s.service")
+			statusOutput, _ := statusCmd.CombinedOutput()
+			i.log(fmt.Sprintf("K3S service status: %s", string(statusOutput)))
+
+			// Get journal logs
+			journalCmd := exec.Command("journalctl", "-n", "20", "-u", "k3s.service")
+			journalOutput, _ := journalCmd.CombinedOutput()
+			i.log(fmt.Sprintf("K3S service logs: %s", string(journalOutput)))
+
+			return fmt.Errorf("K3S service failed to become active after installation")
+		}
 	}
 
-	i.log("K3S installed and service is running successfully")
+	// Wait for kubeconfig to be created
+	i.log("Waiting for kubeconfig to be created...")
+	kubeconfigPath := "/etc/rancher/k3s/k3s.yaml"
+
+	maxKubeRetries := 6
+	for retry := 0; retry < maxKubeRetries; retry++ {
+		time.Sleep(5 * time.Second)
+
+		i.log(fmt.Sprintf("Checking for kubeconfig (attempt %d/%d)...", retry+1, maxKubeRetries))
+		if _, err := os.Stat(kubeconfigPath); err == nil {
+			i.log("Kubeconfig file found")
+			break
+		}
+
+		if retry == maxKubeRetries-1 {
+			i.log("Kubeconfig file not created after multiple attempts")
+			return fmt.Errorf("K3S installed but kubeconfig not created")
+		}
+	}
 
 	// Set KUBECONFIG environment variable
 	i.log("Setting KUBECONFIG environment variable...")
-	os.Setenv("KUBECONFIG", "/etc/rancher/k3s/k3s.yaml")
+	os.Setenv("KUBECONFIG", kubeconfigPath)
 
 	// Verify k3s is working by checking nodes
 	i.log("Verifying K3S installation by checking nodes...")
-	kubeCmd := exec.Command("k3s", "kubectl", "get", "nodes")
-	kubeOutput, err := kubeCmd.CombinedOutput()
 
-	if err != nil {
-		i.log(fmt.Sprintf("Error checking K3S nodes: %s", string(kubeOutput)))
-		return fmt.Errorf("K3S installed but not functioning correctly: %w", err)
+	// Retry kubectl command a few times in case the API server isn't fully up yet
+	maxNodeRetries := 6
+	for retry := 0; retry < maxNodeRetries; retry++ {
+		time.Sleep(5 * time.Second)
+
+		i.log(fmt.Sprintf("Checking K3S nodes (attempt %d/%d)...", retry+1, maxNodeRetries))
+		kubeCmd := exec.Command("k3s", "kubectl", "get", "nodes")
+		kubeOutput, err := kubeCmd.CombinedOutput()
+
+		if err == nil {
+			i.log(fmt.Sprintf("K3S nodes: %s", string(kubeOutput)))
+			i.log("K3S installation verified successfully")
+			return nil
+		}
+
+		if retry == maxNodeRetries-1 {
+			i.log(fmt.Sprintf("Error checking K3S nodes: %s", string(kubeOutput)))
+			return fmt.Errorf("K3S installed but not functioning correctly: %w", err)
+		}
 	}
-
-	i.log(fmt.Sprintf("K3S nodes: %s", string(kubeOutput)))
-	i.log("K3S installation verified successfully")
 
 	return nil
 }
