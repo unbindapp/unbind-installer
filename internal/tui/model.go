@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -200,11 +201,13 @@ func (m Model) startDNSValidation() tea.Cmd {
 			return errMsg{err: nil}
 		}
 
+		baseDomain := strings.Replace("*.", "", m.dnsInfo.Domain, 1)
+
 		// Log the validation attempt
 		m.logChan <- "Starting DNS validation..."
 
 		// Check for Cloudflare first
-		cloudflare := network.CheckCloudflareProxy(m.dnsInfo.Domain, func(msg string) {
+		cloudflare := network.CheckCloudflareProxy(baseDomain, func(msg string) {
 			m.logChan <- msg
 		})
 
@@ -217,7 +220,7 @@ func (m Model) startDNSValidation() tea.Cmd {
 		}
 
 		// Otherwise test the wildcard DNS configuration
-		success := network.TestWildcardDNS(m.dnsInfo.Domain, m.dnsInfo.ExternalIP, func(msg string) {
+		success := network.TestWildcardDNS(baseDomain, m.dnsInfo.ExternalIP, func(msg string) {
 			m.logChan <- msg
 		})
 
@@ -237,6 +240,14 @@ func dnsValidationTimeout(duration time.Duration) tea.Cmd {
 
 // Update handles messages and user input
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle quit messages
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case "ctrl+c", "q", "esc":
+			return m, tea.Quit
+		}
+	}
+
 	// Handle text input for domain entry when in DNS config state
 	if m.state == StateDNSConfig {
 		var cmd tea.Cmd
@@ -272,8 +283,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
-			return m, tea.Quit
 		case "enter":
 			if m.state == StateWelcome {
 				// When Enter is pressed on the welcome screen,

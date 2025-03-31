@@ -274,9 +274,17 @@ func viewDNSFailed(m Model) string {
 // initializeDomainInput initializes the text input for domain entry
 func initializeDomainInput() textinput.Model {
 	ti := textinput.New()
-	ti.Placeholder = "yourdomain.com"
+	ti.Placeholder = "*.yourdomain.com"
 	ti.Focus()
 	ti.Width = 30
+	ti.Validate = func(s string) error {
+		baseDomain := strings.Replace(s, "*.", "", 1)
+		parsed, err := url.Parse(baseDomain)
+		if err != nil {
+			return fmt.Errorf("%s is not a valid URL", s)
+		}
+		return nil
+	},
 	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#009900"))
 	return ti
 }
