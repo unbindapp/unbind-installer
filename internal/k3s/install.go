@@ -24,7 +24,7 @@ func NewInstaller(logChan chan<- string) *Installer {
 // Install installs K3S with the specified flags
 func (i *Installer) Install() error {
 	// Keep the incorrect flag format for testing error handling
-	k3sInstallFlags := "--flannel-backend=none --disable-kube-proxy --disable=servicelb --disable-network-policy --disable-traefik"
+	k3sInstallFlags := "--flannel-backend=none --disable-kube-proxy --disable=servicelb --disable-network-policy --disable=traefik"
 
 	// Log the start of installation
 	i.log("Installing K3S...")
