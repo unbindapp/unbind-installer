@@ -73,10 +73,6 @@ func viewInstallComplete(m Model) string {
 	s.WriteString(getBanner())
 	s.WriteString("\n\n")
 
-	// Success message
-	s.WriteString(m.styles.Success.Render("✓ Installation Complete!"))
-	s.WriteString("\n\n")
-
 	// Installation summary
 	s.WriteString(m.styles.Bold.Render("Installed Packages:"))
 	s.WriteString("\n")

@@ -203,7 +203,7 @@ func (m Model) startDNSValidation() tea.Cmd {
 			return errMsg{err: nil}
 		}
 
-		baseDomain := strings.Replace("*.", "", m.dnsInfo.Domain, 1)
+		baseDomain := strings.Replace(m.dnsInfo.Domain, ".*", "", 1)
 
 		// Log the validation attempt
 		m.logChan <- "Starting DNS validation..."
