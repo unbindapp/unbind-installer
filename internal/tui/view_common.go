@@ -92,15 +92,7 @@ func viewError(m Model) string {
 	} else if errors.Is(m.err, errdefs.ErrK3sInstallFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, the K3s installation failed!"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details."))
-		s.WriteString("\n")
-		errMsg := m.err.Error()
-		// truncate
-		lines := strings.Split(errMsg, "\n")
-		if len(lines) > 5 {
-			errMsg = "[...]\n" + strings.Join(lines[len(lines)-5:], "\n")
-		}
-		s.WriteString(m.styles.Error.Render(fmt.Sprintf("Error message %s", errMsg)))
+		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'd'."))
 	} else if m.err != nil {
 		s.WriteString(m.styles.Error.Render(fmt.Sprintf("An error occurred: %v", m.err)))
 
