@@ -23,7 +23,7 @@ func NewInstaller(logChan chan<- string) *Installer {
 
 // Install installs K3S with the specified flags
 func (i *Installer) Install() error {
-	// Define K3S installation flags
+	// Keep the incorrect flag format for testing error handling
 	k3sInstallFlags := "--flannel-backend=none --disable-kube-proxy --disable=servicelb --disable-network-policy --disable-traefik"
 
 	// Log the start of installation
@@ -55,29 +55,98 @@ func (i *Installer) Install() error {
 	installOutputStr := string(installOutput)
 	i.log(fmt.Sprintf("Installation output: %s", installOutputStr))
 
-	// Even if the installer completes successfully, the service might fail to start
-	// Check for specific failure messages in the output
+	// Check for service failures in the installer output regardless of the err value
+	// This is important because the script can exit successfully while the service fails
 	if strings.Contains(installOutputStr, "Job for k3s.service failed") {
 		i.log("Detected k3s.service failure in the installation output")
 
-		// Get detailed service status
-		statusCmd := exec.Command("systemctl", "status", "k3s.service")
-		statusOutput, _ := statusCmd.CombinedOutput()
-		i.log(fmt.Sprintf("K3S service status: %s", string(statusOutput)))
+		// Collect detailed service diagnostics
+		serviceError := i.collectServiceDiagnostics()
 
-		// Get journal logs
-		journalCmd := exec.Command("journalctl", "-n", "20", "-u", "k3s.service")
-		journalOutput, _ := journalCmd.CombinedOutput()
-		i.log(fmt.Sprintf("K3S service logs: %s", string(journalOutput)))
-
-		return fmt.Errorf("K3S service failed to start after installation")
+		// Return the error from the service failure
+		return fmt.Errorf("K3S service failed to start after installation: %w", serviceError)
 	}
 
-	if err != nil {
-		i.log(fmt.Sprintf("Error installing K3S: %s", installOutputStr))
-		return fmt.Errorf("failed to install K3S: %w", err)
+	// Even if the installer script didn't explicitly report a service failure,
+	// we should check if the service started properly
+	serviceStatus, statusErr := i.checkServiceStatus()
+	if statusErr != nil || serviceStatus != "active" {
+		i.log(fmt.Sprintf("K3S service is not active after installation (status: %s)", serviceStatus))
+
+		// Collect detailed service diagnostics
+		serviceError := i.collectServiceDiagnostics()
+
+		// Return the error from the service failure
+		return fmt.Errorf("K3S service failed to start after installation: %w", serviceError)
 	}
 
+	// Explicitly check for any error messages in the systemd journal that might indicate a problem
+	journalHasErrors, _ := i.checkJournalForErrors()
+	if journalHasErrors {
+		i.log("Detected errors in K3S service journal")
+
+		// Collect detailed service diagnostics
+		serviceError := i.collectServiceDiagnostics()
+
+		// Return the error from the service failure
+		return fmt.Errorf("K3S service has errors after installation: %w", serviceError)
+	}
+
+	// Continue with waiting for K3S to be fully ready
+	return i.waitForK3SAndVerify()
+}
+
+// checkServiceStatus checks if the K3S service is active
+func (i *Installer) checkServiceStatus() (string, error) {
+	checkCmd := exec.Command("systemctl", "is-active", "k3s.service")
+	statusOutput, err := checkCmd.CombinedOutput()
+	statusStr := strings.TrimSpace(string(statusOutput))
+
+	return statusStr, err
+}
+
+// checkJournalForErrors looks for error messages in the K3S service journal
+func (i *Installer) checkJournalForErrors() (bool, error) {
+	// Look for error and fatal level messages in the journal
+	journalCmd := exec.Command("journalctl", "-n", "50", "-u", "k3s.service", "--grep=error|fatal")
+	journalOutput, err := journalCmd.CombinedOutput()
+	journalOutputStr := strings.TrimSpace(string(journalOutput))
+
+	// If there are any entries, we found errors
+	return len(journalOutputStr) > 0, err
+}
+
+// collectServiceDiagnostics collects detailed diagnostics about the K3S service
+func (i *Installer) collectServiceDiagnostics() error {
+	// Get detailed service status
+	statusCmd := exec.Command("systemctl", "status", "-l", "k3s.service")
+	statusOutput, _ := statusCmd.CombinedOutput()
+	i.log(fmt.Sprintf("K3S service status: %s", string(statusOutput)))
+
+	// Get journal logs with priority (error and above)
+	journalCmd := exec.Command("journalctl", "-n", "50", "-p", "err", "-u", "k3s.service", "-l")
+	journalOutput, _ := journalCmd.CombinedOutput()
+	i.log(fmt.Sprintf("K3S service errors from journal: %s", string(journalOutput)))
+
+	// Get all recent journal logs for the service
+	allLogsCmd := exec.Command("journalctl", "-n", "100", "-u", "k3s.service", "-l")
+	allLogsOutput, _ := allLogsCmd.CombinedOutput()
+	i.log(fmt.Sprintf("Recent K3S service logs: %s", string(allLogsOutput)))
+
+	// Check if the service is failed
+	isFailedCmd := exec.Command("systemctl", "is-failed", "k3s.service")
+	isFailedOutput, _ := isFailedCmd.CombinedOutput()
+	isFailedStr := strings.TrimSpace(string(isFailedOutput))
+
+	if isFailedStr == "failed" {
+		return fmt.Errorf("K3S service is in failed state")
+	} else {
+		return fmt.Errorf("K3S service is in abnormal state: %s", isFailedStr)
+	}
+}
+
+// waitForK3SAndVerify waits for K3S to start and verifies the installation
+func (i *Installer) waitForK3SAndVerify() error {
 	// Wait longer for the service to be fully up
 	i.log("Waiting for K3S service to start (this may take up to 30 seconds)...")
 
@@ -87,29 +156,21 @@ func (i *Installer) Install() error {
 		time.Sleep(5 * time.Second)
 
 		i.log(fmt.Sprintf("Checking K3S service status (attempt %d/%d)...", retry+1, maxRetries))
-		checkCmd := exec.Command("systemctl", "is-active", "k3s.service")
-		statusOutput, _ := checkCmd.CombinedOutput()
-		statusStr := strings.TrimSpace(string(statusOutput))
+		status, err := i.checkServiceStatus()
 
-		if statusStr == "active" {
+		if status == "active" {
 			i.log("K3S service is now active")
 			break
 		}
 
-		if retry == maxRetries-1 {
-			i.log("K3S service failed to become active after multiple attempts")
+		// On the last retry, or if we get a definitive "failed" status, collect detailed logs
+		if retry == maxRetries-1 || status == "failed" {
+			i.log(fmt.Sprintf("K3S service failed to become active (status: %s, error: %v)", status, err))
 
-			// Get detailed service status
-			statusCmd := exec.Command("systemctl", "status", "k3s.service")
-			statusOutput, _ := statusCmd.CombinedOutput()
-			i.log(fmt.Sprintf("K3S service status: %s", string(statusOutput)))
+			// Collect detailed diagnostics
+			serviceError := i.collectServiceDiagnostics()
 
-			// Get journal logs
-			journalCmd := exec.Command("journalctl", "-n", "20", "-u", "k3s.service")
-			journalOutput, _ := journalCmd.CombinedOutput()
-			i.log(fmt.Sprintf("K3S service logs: %s", string(journalOutput)))
-
-			return fmt.Errorf("K3S service failed to become active after installation")
+			return fmt.Errorf("K3S service failed to become active after installation: %w", serviceError)
 		}
 	}
 
@@ -129,7 +190,11 @@ func (i *Installer) Install() error {
 
 		if retry == maxKubeRetries-1 {
 			i.log("Kubeconfig file not created after multiple attempts")
-			return fmt.Errorf("K3S installed but kubeconfig not created")
+
+			// Collect detailed diagnostics
+			serviceError := i.collectServiceDiagnostics()
+
+			return fmt.Errorf("K3S installed but kubeconfig not created: %w", serviceError)
 		}
 	}
 
@@ -157,7 +222,11 @@ func (i *Installer) Install() error {
 
 		if retry == maxNodeRetries-1 {
 			i.log(fmt.Sprintf("Error checking K3S nodes: %s", string(kubeOutput)))
-			return fmt.Errorf("K3S installed but not functioning correctly: %w", err)
+
+			// Collect detailed diagnostics
+			serviceError := i.collectServiceDiagnostics()
+
+			return fmt.Errorf("K3S installed but not functioning correctly: %w", serviceError)
 		}
 	}
 
