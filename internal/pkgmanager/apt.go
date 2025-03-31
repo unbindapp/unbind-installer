@@ -20,40 +20,40 @@ func NewAptInstaller(logChan chan<- string) *AptInstaller {
 }
 
 // InstallPackages installs the specified packages using apt-get
-func (a *AptInstaller) InstallPackages(packages []string) error {
+func (self *AptInstaller) InstallPackages(packages []string) error {
 	if len(packages) == 0 {
 		return nil
 	}
 
 	// Log what we're doing
-	a.log(fmt.Sprintf("Updating apt package lists..."))
+	self.log(fmt.Sprintf("Updating apt package lists..."))
 
 	// Update package lists
 	updateCmd := exec.Command("apt-get", "update", "-y")
 	updateOutput, err := updateCmd.CombinedOutput()
 	if err != nil {
-		a.log(fmt.Sprintf("Error updating apt: %s", string(updateOutput)))
+		self.log(fmt.Sprintf("Error updating apt: %s", string(updateOutput)))
 		return fmt.Errorf("failed to update apt: %w", err)
 	}
-	a.log("Package lists updated successfully")
+	self.log("Package lists updated successfully")
 
 	// Install packages
-	a.log(fmt.Sprintf("Installing packages: %s", strings.Join(packages, ", ")))
+	self.log(fmt.Sprintf("Installing packages: %s", strings.Join(packages, ", ")))
 	args := append([]string{"install", "-y"}, packages...)
 	installCmd := exec.Command("apt-get", args...)
 	installOutput, err := installCmd.CombinedOutput()
 	if err != nil {
-		a.log(fmt.Sprintf("Error installing packages: %s", string(installOutput)))
+		self.log(fmt.Sprintf("Error installing packages: %s", string(installOutput)))
 		return fmt.Errorf("failed to install packages: %w", err)
 	}
 
-	a.log("Packages installed successfully")
+	self.log("Packages installed successfully")
 	return nil
 }
 
 // log sends a message to the log channel if available
-func (a *AptInstaller) log(message string) {
-	if a.LogChan != nil {
-		a.LogChan <- message
+func (self *AptInstaller) log(message string) {
+	if self.LogChan != nil {
+		self.LogChan <- message
 	}
 }

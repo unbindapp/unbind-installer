@@ -15,9 +15,9 @@ import (
 )
 
 // listenForLogs returns a command that listens for log messages
-func (m Model) listenForLogs() tea.Cmd {
+func (self Model) listenForLogs() tea.Cmd {
 	return func() tea.Msg {
-		msg := <-m.logChan
+		msg := <-self.logChan
 		return logMsg{msg}
 	}
 }
@@ -36,7 +36,7 @@ func detectOSInfo() tea.Msg {
 }
 
 // installRequiredPackages is a command that installs the required packages
-func (m Model) installRequiredPackages() tea.Cmd {
+func (self Model) installRequiredPackages() tea.Cmd {
 	return func() tea.Msg {
 		// Packages to install
 		packages := []string{
@@ -47,7 +47,7 @@ func (m Model) installRequiredPackages() tea.Cmd {
 		}
 
 		// Create a new apt installer
-		installer := pkgmanager.NewAptInstaller(m.logChan)
+		installer := pkgmanager.NewAptInstaller(self.logChan)
 
 		// Install the packages
 		err := installer.InstallPackages(packages)
@@ -60,18 +60,18 @@ func (m Model) installRequiredPackages() tea.Cmd {
 }
 
 // startDetectingIPs starts the IP detection process
-func (m Model) startDetectingIPs() tea.Cmd {
+func (self Model) startDetectingIPs() tea.Cmd {
 	return func() tea.Msg {
-		if m.dnsInfo == nil {
-			m.dnsInfo = &dnsInfo{}
+		if self.dnsInfo == nil {
+			self.dnsInfo = &dnsInfo{}
 		}
 
 		ipInfo, err := network.DetectIPs(func(msg string) {
-			m.logChan <- msg
+			self.logChan <- msg
 		})
 
 		if err != nil {
-			m.logChan <- "Error detecting IPs: " + err.Error()
+			self.logChan <- "Error detecting IPs: " + err.Error()
 		}
 
 		return detectIPsCompleteMsg{ipInfo: ipInfo}
@@ -79,13 +79,13 @@ func (m Model) startDetectingIPs() tea.Cmd {
 }
 
 // startDNSValidation starts the DNS validation process
-func (m Model) startDNSValidation() tea.Cmd {
+func (self Model) startDNSValidation() tea.Cmd {
 	return func() tea.Msg {
-		if m.dnsInfo == nil || m.dnsInfo.Domain == "" {
+		if self.dnsInfo == nil || self.dnsInfo.Domain == "" {
 			return errMsg{err: nil}
 		}
 
-		baseDomain := strings.Replace(m.dnsInfo.Domain, "*.", "", 1)
+		baseDomain := strings.Replace(self.dnsInfo.Domain, "*.", "", 1)
 
 		testDomains := []string{
 			"unbind." + baseDomain,
@@ -93,13 +93,13 @@ func (m Model) startDNSValidation() tea.Cmd {
 		}
 
 		// Log the validation attempt
-		m.logChan <- "Starting DNS validation..."
+		self.logChan <- "Starting DNS validation..."
 
 		// Check for Cloudflare first
 		cloudflareSuccessCount := 0
 		for _, domain := range testDomains {
 			cloudflare := network.CheckCloudflareProxy(domain, func(msg string) {
-				m.logChan <- msg
+				self.logChan <- msg
 			})
 
 			// If Cloudflare is detected, consider it successful
@@ -118,8 +118,8 @@ func (m Model) startDNSValidation() tea.Cmd {
 		// Otherwise test the wildcard DNS configuration
 		successCount := 0
 		for _, domain := range testDomains {
-			success := network.ValidateDNS(domain, m.dnsInfo.ExternalIP, func(msg string) {
-				m.logChan <- msg
+			success := network.ValidateDNS(domain, self.dnsInfo.ExternalIP, func(msg string) {
+				self.logChan <- msg
 			})
 			if success {
 				successCount++
@@ -147,15 +147,15 @@ func dnsValidationTimeout(duration time.Duration) tea.Cmd {
 }
 
 // installK3S is a command that installs K3S
-func (m Model) installK3S() tea.Cmd {
+func (self Model) installK3S() tea.Cmd {
 	return func() tea.Msg {
 		// Create a new K3S installer
-		installer := k3s.NewInstaller(m.logChan)
+		installer := k3s.NewInstaller(self.logChan)
 
 		// Install K3S
 		err := installer.Install()
 		if err != nil {
-			m.logChan <- fmt.Sprintf("K3S installation failed: %s", err.Error())
+			self.logChan <- fmt.Sprintf("K3S installation failed: %s", err.Error())
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}
 		}
 

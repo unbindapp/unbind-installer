@@ -63,29 +63,29 @@ func NewModel() Model {
 }
 
 // Init is the Bubble Tea initialization function
-func (m Model) Init() tea.Cmd {
+func (self Model) Init() tea.Cmd {
 	return tea.Batch(
-		m.listenForLogs(),
+		self.listenForLogs(),
 	)
 }
 
 // Update handles messages and user input
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle global key events first
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
 		case "ctrl+c", "q", "esc":
-			return m, tea.Quit
+			return self, tea.Quit
 		case "d":
-			if m.state != StateDNSConfig {
+			if self.state != StateDNSConfig {
 				// Toggle debug logs view
-				if m.state != StateDebugLogs {
-					m.previousState = m.state
-					m.state = StateDebugLogs
+				if self.state != StateDebugLogs {
+					self.previousState = self.state
+					self.state = StateDebugLogs
 				} else {
-					m.state = m.previousState
+					self.state = self.previousState
 				}
-				return m, nil
+				return self, nil
 			}
 		}
 	}
@@ -93,101 +93,101 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Process spinner ticks (needed for all loading states)
 	if tickMsg, ok := msg.(spinner.TickMsg); ok {
 		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(tickMsg)
-		return m, tea.Batch(cmd, m.listenForLogs())
+		self.spinner, cmd = self.spinner.Update(tickMsg)
+		return self, tea.Batch(cmd, self.listenForLogs())
 	}
 
 	// Process window size messages (applies to all states)
 	if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
-		m.width = sizeMsg.Width
-		m.height = sizeMsg.Height
+		self.width = sizeMsg.Width
+		self.height = sizeMsg.Height
 	}
 
 	// Process log messages (applies to all states)
 	if logMsg, ok := msg.(logMsg); ok {
-		m.logMessages = append(m.logMessages, logMsg.message)
-		return m, m.listenForLogs()
+		self.logMessages = append(self.logMessages, logMsg.message)
+		return self, self.listenForLogs()
 	}
 
 	// Delegate to state-specific handlers
-	switch m.state {
+	switch self.state {
 	case StateWelcome:
-		return m.updateWelcomeState(msg)
+		return self.updateWelcomeState(msg)
 	case StateLoading:
-		return m.updateLoadingState(msg)
+		return self.updateLoadingState(msg)
 	case StateOSInfo:
-		return m.updateOSInfoState(msg)
+		return self.updateOSInfoState(msg)
 	case StateInstallingPackages:
-		return m.updateInstallingPackagesState(msg)
+		return self.updateInstallingPackagesState(msg)
 	case StateInstallComplete:
-		return m.updateInstallCompleteState(msg)
+		return self.updateInstallCompleteState(msg)
 	case StateDetectingIPs:
-		return m.updateDetectingIPsState(msg)
+		return self.updateDetectingIPsState(msg)
 	case StateDNSConfig:
-		return m.updateDNSConfigState(msg)
+		return self.updateDNSConfigState(msg)
 	case StateDNSValidation:
-		return m.updateDNSValidationState(msg)
+		return self.updateDNSValidationState(msg)
 	case StateDNSSuccess:
-		return m.updateDNSSuccessState(msg)
+		return self.updateDNSSuccessState(msg)
 	case StateDNSFailed:
-		return m.updateDNSFailedState(msg)
+		return self.updateDNSFailedState(msg)
 	case StateDebugLogs:
-		return m.updateDebugLogsState(msg)
+		return self.updateDebugLogsState(msg)
 	case StateError:
-		return m.updateErrorState(msg)
+		return self.updateErrorState(msg)
 	case StateInstallingK3S:
-		return m.updateInstallingK3SState(msg)
+		return self.updateInstallingK3SState(msg)
 	default:
-		return m, m.listenForLogs()
+		return self, self.listenForLogs()
 	}
 }
 
 // View delegates to the appropriate view function based on state
-func (m Model) View() string {
-	switch m.state {
+func (self Model) View() string {
+	switch self.state {
 	case StateWelcome:
-		return viewWelcome(m)
+		return viewWelcome(self)
 	case StateLoading:
-		return viewLoading(m)
+		return viewLoading(self)
 	case StateError:
-		return viewError(m)
+		return viewError(self)
 	case StateOSInfo:
-		return viewOSInfo(m)
+		return viewOSInfo(self)
 	case StateInstallingPackages:
-		return viewInstallingPackages(m)
+		return viewInstallingPackages(self)
 	case StateInstallComplete:
-		return viewInstallComplete(m)
+		return viewInstallComplete(self)
 	case StateDetectingIPs:
-		return viewDetectingIPs(m)
+		return viewDetectingIPs(self)
 	case StateDNSConfig:
-		return viewDNSConfig(m)
+		return viewDNSConfig(self)
 	case StateDNSValidation:
-		return viewDNSValidation(m)
+		return viewDNSValidation(self)
 	case StateDNSSuccess:
-		return viewDNSSuccess(m)
+		return viewDNSSuccess(self)
 	case StateDNSFailed:
-		return viewDNSFailed(m)
+		return viewDNSFailed(self)
 	case StateDebugLogs:
-		return viewDebugLogs(m)
+		return viewDebugLogs(self)
 	case StateInstallingK3S:
-		return viewInstallingK3S(m)
+		return viewInstallingK3S(self)
 	default:
-		return viewWelcome(m)
+		return viewWelcome(self)
 	}
 }
 
 // Helper methods for state transitions and utility functions
-func (m *Model) handleGlobalKeyEvents(msg tea.KeyMsg) tea.Cmd {
+func (self *Model) handleGlobalKeyEvents(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		return tea.Quit
 	case "d":
 		// Toggle debug logs view
-		if m.state != StateDebugLogs {
-			m.previousState = m.state
-			m.state = StateDebugLogs
+		if self.state != StateDebugLogs {
+			self.previousState = self.state
+			self.state = StateDebugLogs
 		} else {
-			m.state = m.previousState
+			self.state = self.previousState
 		}
 		return nil
 	}
@@ -195,10 +195,10 @@ func (m *Model) handleGlobalKeyEvents(msg tea.KeyMsg) tea.Cmd {
 }
 
 // UpdateDomain updates the domain in the DNS info
-func (m *Model) UpdateDomain(domain string) {
-	if m.dnsInfo == nil {
-		m.dnsInfo = &dnsInfo{}
+func (self *Model) UpdateDomain(domain string) {
+	if self.dnsInfo == nil {
+		self.dnsInfo = &dnsInfo{}
 	}
-	m.dnsInfo.Domain = domain
-	m.domainInput.SetValue(domain)
+	self.dnsInfo.Domain = domain
+	self.domainInput.SetValue(domain)
 }
