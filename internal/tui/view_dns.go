@@ -45,7 +45,15 @@ func viewDetectingIPs(m Model) string {
 		}
 
 		for _, msg := range m.logMessages[startIdx:] {
-			s.WriteString(fmt.Sprintf("  %s\n", m.styles.Subtle.Render(msg)))
+			// Truncate the message if it's too long
+			const maxLength = 80 // Reasonable terminal width
+
+			displayMsg := msg
+			if len(msg) > maxLength {
+				displayMsg = msg[:maxLength-3] + "..."
+			}
+
+			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
 		}
 	}
 
@@ -221,7 +229,15 @@ func viewDNSValidation(m Model) string {
 		}
 
 		for _, msg := range m.logMessages[startIdx:] {
-			s.WriteString(fmt.Sprintf("  %s\n", m.styles.Subtle.Render(msg)))
+			// Truncate the message if it's too long
+			const maxLength = 80 // Reasonable terminal width
+
+			displayMsg := msg
+			if len(msg) > maxLength {
+				displayMsg = msg[:maxLength-3] + "..."
+			}
+
+			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
 		}
 	}
 
