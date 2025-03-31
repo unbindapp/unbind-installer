@@ -49,10 +49,6 @@ func viewDetectingIPs(m Model) string {
 		}
 	}
 
-	// Status bar at the bottom
-	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
-
 	return s.String()
 }
 
@@ -325,9 +321,6 @@ func viewDNSSuccess(m Model) string {
 	continuePrompt := m.styles.HighlightButton.Render(" Press Enter to continue ")
 	s.WriteString(continuePrompt)
 	s.WriteString("\n\n")
-
-	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
