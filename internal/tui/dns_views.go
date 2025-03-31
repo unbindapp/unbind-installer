@@ -2,11 +2,11 @@ package tui
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/unbindapp/unbind-installer/internal/utils"
 )
 
 // viewDetectingIPs shows the IP detection screen
@@ -269,9 +269,8 @@ func initializeDomainInput() textinput.Model {
 	ti.Width = 30
 	ti.Validate = func(s string) error {
 		baseDomain := strings.Replace(s, "*.", "", 1)
-		_, err := url.Parse(baseDomain)
-		if err != nil {
-			return fmt.Errorf("%s is not a valid URL", s)
+		if !utils.IsDNSName(baseDomain) {
+			return fmt.Errorf("%s is not a valid domain", s)
 		}
 		return nil
 	}
