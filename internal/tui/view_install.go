@@ -3,6 +3,10 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // viewInstallingPackages shows the packages installation screen
@@ -58,11 +62,35 @@ func viewInstallingPackages(m Model) string {
 		}
 	}
 
-	// Status bar at the bottom
-	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
-
 	return s.String()
+}
+
+func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, tea.Batch(cmd, m.listenForLogs())
+
+	case installCompleteMsg:
+		m.state = StateInstallComplete
+		m.isLoading = false
+
+		// Schedule automatic advancement after 1 second
+		return m, tea.Batch(
+			m.listenForLogs(),
+			tea.Tick(1*time.Second, func(time.Time) tea.Msg {
+				return autoAdvanceMsg{}
+			}),
+		)
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, m.listenForLogs()
+	}
+
+	return m, m.listenForLogs()
 }
 
 // viewInstallComplete shows the installation complete screen
@@ -93,4 +121,26 @@ func viewInstallComplete(m Model) string {
 	s.WriteString("\n\n")
 
 	return s.String()
+}
+
+// updateInstallCompleteState handles updates in the installation complete state
+func (m Model) updateInstallCompleteState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case autoAdvanceMsg:
+		// Start IP detection for DNS configuration
+		m.state = StateDetectingIPs
+		m.isLoading = true
+		return m, tea.Batch(
+			m.spinner.Tick,
+			m.startDetectingIPs(),
+			m.listenForLogs(),
+		)
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, m.listenForLogs()
+	}
+
+	return m, m.listenForLogs()
 }

@@ -3,8 +3,11 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/unbindapp/unbind-installer/internal/utils"
 )
@@ -51,6 +54,43 @@ func viewDetectingIPs(m Model) string {
 	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
+}
+
+// updateDetectingIPsState handles updates in the detecting IPs state
+func (m Model) updateDetectingIPsState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, tea.Batch(cmd, m.listenForLogs())
+
+	case detectIPsCompleteMsg:
+		m.state = StateDNSConfig
+		m.isLoading = false
+
+		// Initialize DNS info if needed
+		if m.dnsInfo == nil {
+			m.dnsInfo = &dnsInfo{}
+		}
+
+		// Store the detected IPs
+		if msg.ipInfo != nil {
+			m.dnsInfo.InternalIP = msg.ipInfo.InternalIP
+			m.dnsInfo.ExternalIP = msg.ipInfo.ExternalIP
+		}
+
+		// Focus the domain input field
+		m.domainInput.Focus()
+
+		return m, m.listenForLogs()
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, m.listenForLogs()
+	}
+
+	return m, m.listenForLogs()
 }
 
 // viewDNSConfig shows the DNS configuration screen
@@ -108,6 +148,44 @@ func viewDNSConfig(m Model) string {
 	return s.String()
 }
 
+func (m Model) updateDNSConfigState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	// Handle text input updates
+	m.domainInput, cmd = m.domainInput.Update(msg)
+
+	// Store the domain value
+	if m.dnsInfo == nil {
+		m.dnsInfo = &dnsInfo{}
+	}
+	m.dnsInfo.Domain = m.domainInput.Value()
+
+	// If Enter was pressed with a valid domain, start validation
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
+		if m.dnsInfo.Domain != "" {
+			m.state = StateDNSValidation
+			m.isLoading = true
+			m.dnsInfo.ValidationStarted = true
+			m.dnsInfo.TestingStartTime = time.Now()
+
+			return m, tea.Batch(
+				m.spinner.Tick,
+				m.startDNSValidation(),
+				dnsValidationTimeout(30*time.Second),
+				m.listenForLogs(),
+			)
+		}
+	}
+
+	if _, ok := msg.(tea.WindowSizeMsg); ok {
+		// Handle window size changes
+		return m, tea.Batch(cmd, m.listenForLogs())
+	}
+
+	// For any other message, keep updating the input and listening for logs
+	return m, tea.Batch(cmd, m.listenForLogs())
+}
+
 // viewDNSValidation shows the DNS validation screen
 func viewDNSValidation(m Model) string {
 	s := strings.Builder{}
@@ -158,6 +236,44 @@ func viewDNSValidation(m Model) string {
 	return s.String()
 }
 
+// updateDNSValidationState handles updates in the DNS validation state
+func (m Model) updateDNSValidationState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, tea.Batch(cmd, m.listenForLogs())
+
+	case dnsValidationCompleteMsg:
+		m.dnsInfo.ValidationSuccess = msg.success
+		m.dnsInfo.CloudflareDetected = msg.cloudflare
+		m.dnsInfo.ValidationDuration = time.Since(m.dnsInfo.TestingStartTime)
+
+		if msg.success {
+			m.state = StateDNSSuccess
+		} else {
+			m.state = StateDNSFailed
+		}
+
+		m.isLoading = false
+		return m, m.listenForLogs()
+
+	case dnsValidationTimeoutMsg:
+		m.dnsInfo.ValidationDuration = time.Since(m.dnsInfo.TestingStartTime)
+		m.state = StateDNSFailed
+		m.isLoading = false
+		m.logChan <- "DNS validation timed out after 30 seconds"
+		return m, m.listenForLogs()
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, m.listenForLogs()
+	}
+
+	return m, m.listenForLogs()
+}
+
 // viewDNSSuccess shows the DNS success screen
 func viewDNSSuccess(m Model) string {
 	s := strings.Builder{}
@@ -177,11 +293,13 @@ func viewDNSSuccess(m Model) string {
 		s.WriteString("\n")
 		s.WriteString(m.styles.Normal.Render("Your domain is configured with Cloudflare which works correctly with Unbind."))
 	} else {
+		baseDomain := strings.Replace(m.dnsInfo.Domain, "*.", "", 1)
+		wildcardDomain := "*." + baseDomain
 		s.WriteString(m.styles.Bold.Render("Domain: "))
-		s.WriteString(m.styles.Normal.Render(m.dnsInfo.Domain))
+		s.WriteString(m.styles.Normal.Render(baseDomain))
 		s.WriteString("\n")
 		s.WriteString(m.styles.Bold.Render("Wildcard DNS: "))
-		s.WriteString(m.styles.Normal.Render("*." + m.dnsInfo.Domain))
+		s.WriteString(m.styles.Normal.Render("*." + wildcardDomain))
 		s.WriteString("\n")
 		s.WriteString(m.styles.Bold.Render("Points to: "))
 		s.WriteString(m.styles.Normal.Render(m.dnsInfo.ExternalIP))
@@ -204,6 +322,22 @@ func viewDNSSuccess(m Model) string {
 	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
+}
+
+func (m Model) updateDNSSuccessState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if keyMsg.String() == "enter" {
+			// Continue to the next step after successful DNS validation
+			return m, tea.Quit
+		}
+	}
+
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = msg.Width
+		m.height = msg.Height
+	}
+
+	return m, m.listenForLogs()
 }
 
 // viewDNSFailed shows the DNS failure screen
@@ -259,6 +393,53 @@ func viewDNSFailed(m Model) string {
 	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
+}
+
+// updateDNSFailedState handles updates in the DNS failed state
+func (m Model) updateDNSFailedState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case "enter":
+			// Continue anyway despite DNS validation failure
+			m.logChan <- "Continuing without validated DNS configuration..."
+			return m, tea.Quit
+
+		case "r":
+			// Add feedback message
+			m.logChan <- "Retrying DNS validation..."
+
+			// Retry DNS validation
+			m.state = StateDNSValidation
+			m.isLoading = true
+			m.dnsInfo.ValidationStarted = true
+			m.dnsInfo.TestingStartTime = time.Now()
+
+			return m, tea.Batch(
+				m.spinner.Tick,
+				m.startDNSValidation(),
+				dnsValidationTimeout(30*time.Second),
+				m.listenForLogs(),
+			)
+
+		case "c":
+			// Go back to DNS configuration
+			m.state = StateDNSConfig
+			m.isLoading = false
+
+			// Reset domain input
+			m.domainInput.SetValue("")
+			m.domainInput.Focus()
+
+			return m, m.listenForLogs()
+		}
+	}
+
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = msg.Width
+		m.height = msg.Height
+	}
+
+	return m, m.listenForLogs()
 }
 
 // initializeDomainInput initializes the text input for domain entry

@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -46,26 +47,6 @@ func viewWelcome(m Model) string {
 
 	s.WriteString("\n")
 
-	// Recommendations section
-	// recTitle := m.styles.Bold.Render("Minimum Recommendations:")
-	// s.WriteString(recTitle)
-	// s.WriteString("\n")
-
-	// recList := []string{
-	// 	"2 CPUs",
-	// 	"4 GB RAM",
-	// 	"20 GB Disk Space",
-	// }
-
-	// for _, rec := range recList {
-	// 	bullet := m.styles.Key.Render("•")
-	// 	text := m.styles.Normal.Render(rec)
-	// 	s.WriteString(bullet + " " + text)
-	// 	s.WriteString("\n")
-	// }
-
-	// s.WriteString("\n")
-
 	// What will be installed section
 	installTitle := m.styles.Bold.Render("What will be installed")
 	subtitle := m.styles.Subtle.Render("(most of these are automatically managed by unbind)")
@@ -104,4 +85,24 @@ func viewWelcome(m Model) string {
 	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
+}
+
+// updateWelcomeState handles updates in the welcome state
+func (m Model) updateWelcomeState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if keyMsg.String() == "enter" {
+			// When Enter is pressed on the welcome screen,
+			// transition to the loading state and start OS detection
+			m.state = StateLoading
+			m.isLoading = true
+			return m, tea.Batch(
+				m.spinner.Tick,
+				detectOSInfo,
+				m.listenForLogs(),
+			)
+		}
+	}
+
+	// For any other message, just keep listening for logs
+	return m, m.listenForLogs()
 }

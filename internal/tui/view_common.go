@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 )
@@ -22,6 +25,42 @@ func viewLoading(m Model) string {
 	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
+}
+
+// updateLoadingState handles updates in the loading state
+func (m Model) updateLoadingState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, tea.Batch(cmd, m.listenForLogs())
+
+	case osInfoMsg:
+		m.osInfo = msg.info
+		m.state = StateOSInfo
+		m.isLoading = false
+
+		// Schedule automatic advancement after 1 second
+		return m, tea.Batch(
+			m.listenForLogs(),
+			tea.Tick(1*time.Second, func(time.Time) tea.Msg {
+				return installPackagesMsg{}
+			}),
+		)
+
+	case errMsg:
+		m.err = msg.err
+		m.state = StateError
+		m.isLoading = false
+		return m, m.listenForLogs()
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, m.listenForLogs()
+	}
+
+	return m, m.listenForLogs()
 }
 
 // viewError shows the error screen
@@ -58,6 +97,16 @@ func viewError(m Model) string {
 	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
+}
+
+// updateErrorState handles updates in the error state
+func (m Model) updateErrorState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = msg.Width
+		m.height = msg.Height
+	}
+
+	return m, m.listenForLogs()
 }
 
 // viewOSInfo shows the OS information
@@ -100,4 +149,25 @@ func viewOSInfo(m Model) string {
 	s.WriteString("\n\n")
 
 	return s.String()
+}
+
+// updateOSInfoState handles updates in the OS info state
+func (m Model) updateOSInfoState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case installPackagesMsg:
+		m.state = StateInstallingPackages
+		m.isLoading = true
+		return m, tea.Batch(
+			m.spinner.Tick,
+			m.installRequiredPackages(),
+			m.listenForLogs(),
+		)
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, m.listenForLogs()
+	}
+
+	return m, m.listenForLogs()
 }
