@@ -487,6 +487,8 @@ func (m Model) View() string {
 		return viewDNSSuccess(m)
 	case StateDNSFailed:
 		return viewDNSFailed(m)
+	case StateDebugLogs:
+		return viewDebugLogs(m)
 	default:
 		return viewWelcome(m)
 	}
