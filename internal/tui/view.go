@@ -97,11 +97,5 @@ func viewOSInfo(m Model) string {
 	s.WriteString(m.styles.Success.Render("✓ Your system is compatible with Unbind!"))
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.HighlightButton.Render(" Press Enter to begin installation "))
-	s.WriteString("\n\n")
-
-	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
-
 	return s.String()
 }

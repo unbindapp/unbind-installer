@@ -142,6 +142,8 @@ type detectIPsCompleteMsg struct {
 
 type dnsValidationMsg struct{}
 
+type autoAdvanceMsg struct{}
+
 type dnsValidationCompleteMsg struct {
 	success    bool
 	cloudflare bool
@@ -323,6 +325,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "r":
 			if m.state == StateDNSFailed {
+				// Add feedback message
+				m.logChan <- "Retrying DNS validation..."
+
 				// Retry DNS validation
 				m.state = StateDNSValidation
 				m.isLoading = true
@@ -384,10 +389,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.listenForLogs(),
 		)
 
+	// Then in your Update function, modify the installCompleteMsg case:
 	case installCompleteMsg:
 		m.state = StateInstallComplete
 		m.isLoading = false
-		return m, m.listenForLogs()
+
+		// Schedule automatic advancement after 3 seconds
+		return m, tea.Batch(
+			m.listenForLogs(),
+			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+				return autoAdvanceMsg{}
+			}),
+		)
+
+	// And add a new case to handle the automatic advancement:
+	case autoAdvanceMsg:
+		if m.state == StateInstallComplete {
+			// Start IP detection for DNS configuration
+			m.state = StateDetectingIPs
+			m.isLoading = true
+			return m, tea.Batch(
+				m.spinner.Tick,
+				m.startDetectingIPs(),
+				m.listenForLogs(),
+			)
+		}
+		return m, nil
 
 	case detectIPsCompleteMsg:
 		m.state = StateDNSConfig
