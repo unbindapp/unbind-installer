@@ -218,9 +218,17 @@ func (m Model) startDNSValidation() tea.Cmd {
 
 		// If Cloudflare is detected, consider it successful
 		if cloudflare {
-			return dnsValidationCompleteMsg{
-				success:    true,
-				cloudflare: true,
+			// Also check a subdomain
+			test := "test." + baseDomain
+			cloudflare = network.CheckCloudflareProxy(test, func(msg string) {
+				m.logChan <- msg
+			})
+
+			if cloudflare {
+				return dnsValidationCompleteMsg{
+					success:    true,
+					cloudflare: true,
+				}
 			}
 		}
 
