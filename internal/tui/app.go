@@ -77,14 +77,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
 		case "d":
-			// Toggle debug logs view
-			if m.state != StateDebugLogs {
-				m.previousState = m.state
-				m.state = StateDebugLogs
-			} else {
-				m.state = m.previousState
+			if m.state != StateDNSConfig {
+				// Toggle debug logs view
+				if m.state != StateDebugLogs {
+					m.previousState = m.state
+					m.state = StateDebugLogs
+				} else {
+					m.state = m.previousState
+				}
+				return m, nil
 			}
-			return m, nil
 		}
 	}
 
