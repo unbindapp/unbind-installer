@@ -67,12 +67,6 @@ func viewDNSConfig(m Model) string {
 
 	// Display detected IP addresses
 	if m.dnsInfo != nil {
-		if m.dnsInfo.InternalIP != "" {
-			s.WriteString(m.styles.Bold.Render("Internal IP: "))
-			s.WriteString(m.styles.Normal.Render(m.dnsInfo.InternalIP))
-			s.WriteString("\n")
-		}
-
 		if m.dnsInfo.ExternalIP != "" {
 			s.WriteString(m.styles.Bold.Render("External IP: "))
 			s.WriteString(m.styles.Key.Render(m.dnsInfo.ExternalIP))
@@ -91,11 +85,6 @@ func viewDNSConfig(m Model) string {
 	s.WriteString(m.styles.Normal.Render("2. Create an 'A' record for *.yourdomain.com pointing to your external IP"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("3. Enter your domain below and press Enter to validate"))
-	s.WriteString("\n\n")
-
-	// Cloudflare note - REMOVED the DNS only message
-	s.WriteString(m.styles.Bold.Render("Note: "))
-	s.WriteString(m.styles.Normal.Render("This will also work with Cloudflare and other proxy services."))
 	s.WriteString("\n\n")
 
 	// Domain input field

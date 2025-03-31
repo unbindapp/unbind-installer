@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ type ApplicationState int
 
 const (
 	StateWelcome ApplicationState = iota
+	StateDebugLogs
 	StateLoading
 	StateRootDetection
 	StateOSInfo
@@ -46,18 +48,19 @@ type dnsInfo struct {
 
 // Model represents the application state
 type Model struct {
-	state       ApplicationState
-	osInfo      *osinfo.OSInfo
-	err         error
-	spinner     spinner.Model
-	width       int
-	height      int
-	isLoading   bool
-	styles      Styles
-	logMessages []string
-	logChan     chan string
-	dnsInfo     *dnsInfo
-	domainInput textinput.Model
+	previousState ApplicationState
+	state         ApplicationState
+	osInfo        *osinfo.OSInfo
+	err           error
+	spinner       spinner.Model
+	width         int
+	height        int
+	isLoading     bool
+	styles        Styles
+	logMessages   []string
+	logChan       chan string
+	dnsInfo       *dnsInfo
+	domainInput   textinput.Model
 }
 
 // NewModel initializes a new Model
@@ -285,6 +288,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "d":
+			// Toggle debug logs view
+			if m.state != StateDebugLogs {
+				m.previousState = m.state
+				m.state = StateDebugLogs
+			} else {
+				m.state = m.previousState
+			}
+			return m, nil
 		case "enter":
 			if m.state == StateWelcome {
 				// When Enter is pressed on the welcome screen,
@@ -344,7 +356,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Schedule automatic advancement after 3 seconds
 		return m, tea.Batch(
 			m.listenForLogs(),
-			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			tea.Tick(1*time.Second, func(time.Time) tea.Msg {
 				return installPackagesMsg{}
 			}),
 		)
@@ -384,7 +396,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Schedule automatic advancement after 3 seconds
 		return m, tea.Batch(
 			m.listenForLogs(),
-			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			tea.Tick(1*time.Second, func(time.Time) tea.Msg {
 				return autoAdvanceMsg{}
 			}),
 		)
@@ -487,4 +499,23 @@ func (m *Model) UpdateDomain(domain string) {
 	}
 	m.dnsInfo.Domain = domain
 	m.domainInput.SetValue(domain)
+}
+
+// Add debug view
+func viewDebugLogs(m Model) string {
+	s := strings.Builder{}
+	s.WriteString(m.styles.Title.Render("Debug Logs"))
+	s.WriteString("\n\n")
+
+	if len(m.logMessages) == 0 {
+		s.WriteString("No logs available")
+	} else {
+		for i, msg := range m.logMessages {
+			s.WriteString(fmt.Sprintf("%d: %s\n", i, msg))
+		}
+	}
+
+	s.WriteString("\n")
+	s.WriteString(m.styles.StatusBar.Render("Press 'd' to return, 'ctrl+c' to quit"))
+	return s.String()
 }

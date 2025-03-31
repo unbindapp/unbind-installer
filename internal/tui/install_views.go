@@ -89,7 +89,7 @@ func viewInstallComplete(m Model) string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("Now I will proceed to DNS configuration."))
+	s.WriteString(m.styles.Success.Render("✓ Finished installing pre-requisites!"))
 	s.WriteString("\n\n")
 
 	return s.String()
