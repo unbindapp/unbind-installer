@@ -13,31 +13,29 @@ import (
 	"time"
 )
 
-// IPInfo holds detected IP address information
+// IPInfo holds detected IP address information.
 type IPInfo struct {
 	InternalIP string
 	ExternalIP string
 }
 
-// DetectIPs attempts to detect the internal and external IP addresses
+// DetectIPs attempts to detect the internal and external IP addresses.
 func DetectIPs(logFn func(string)) (*IPInfo, error) {
 	ipInfo := &IPInfo{}
 
-	// Detect internal IP
 	logFn("Detecting internal IP address...")
 	internalIP, err := detectInternalIP()
 	if err != nil {
-		logFn(fmt.Sprintf("Warning: Could not auto-detect internal IP: %v", err))
+		logFn(fmt.Sprintf("Warning: could not auto-detect internal IP: %v", err))
 	} else {
 		ipInfo.InternalIP = internalIP
 		logFn(fmt.Sprintf("Detected internal IP: %s", internalIP))
 	}
 
-	// Detect external IP
 	logFn("Detecting external IP address...")
 	externalIP, err := detectExternalIP()
 	if err != nil {
-		logFn(fmt.Sprintf("Warning: Could not auto-detect external IP: %v", err))
+		logFn(fmt.Sprintf("Warning: could not auto-detect external IP: %v", err))
 	} else {
 		ipInfo.ExternalIP = externalIP
 		logFn(fmt.Sprintf("Detected external IP: %s", externalIP))
@@ -46,9 +44,9 @@ func DetectIPs(logFn func(string)) (*IPInfo, error) {
 	return ipInfo, nil
 }
 
-// detectInternalIP attempts to detect the internal IP address
+// detectInternalIP tries to detect the machine's internal IP using a few different methods.
 func detectInternalIP() (string, error) {
-	// First try: Use Go's net package
+	// 1) Use a UDP dial to a public IP (like 8.8.8.8) – a common trick to figure out default interface.
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err == nil {
 		defer conn.Close()
@@ -56,55 +54,42 @@ func detectInternalIP() (string, error) {
 		return localAddr.IP.String(), nil
 	}
 
-	// Second try: Run ip route command
+	// 2) Fallback: Parse the output of `ip route get 1`.
 	cmd := exec.Command("ip", "route", "get", "1")
 	output, err := cmd.Output()
 	if err == nil {
 		re := regexp.MustCompile(`src\s+(\d+\.\d+\.\d+\.\d+)`)
-		matches := re.FindSubmatch(output)
-		if len(matches) > 1 {
+		if matches := re.FindSubmatch(output); len(matches) > 1 {
 			return string(matches[1]), nil
 		}
 	}
 
-	// Third try: Get all network interfaces
-	interfaces, err := net.Interfaces()
+	// 3) As a last fallback, iterate network interfaces.
+	ifaces, err := net.Interfaces()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("could not list interfaces: %w", err)
 	}
-
-	for _, iface := range interfaces {
-		// Skip loopback and not up interfaces
-		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+	for _, iface := range ifaces {
+		// Skip loopback or interfaces that are down.
+		if (iface.Flags&net.FlagLoopback) != 0 || (iface.Flags&net.FlagUp) == 0 {
 			continue
 		}
-
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-
+		addrs, _ := iface.Addrs()
 		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
+			if ipNet, ok := addr.(*net.IPNet); ok {
+				v4 := ipNet.IP.To4()
+				if v4 != nil && v4[0] != 127 { // Skip 127.x.x.x
+					return v4.String(), nil
+				}
 			}
-
-			v4 := ipNet.IP.To4()
-			if v4 == nil || v4[0] == 127 { // Skip loopback addresses
-				continue
-			}
-
-			return v4.String(), nil
 		}
 	}
 
 	return "", fmt.Errorf("could not detect internal IP address")
 }
 
-// detectExternalIP attempts to detect the external IP address
+// detectExternalIP attempts to detect the external IP address via HTTP-based services.
 func detectExternalIP() (string, error) {
-	// List of services to try
 	services := []string{
 		"https://ifconfig.me",
 		"https://api.ipify.org",
@@ -120,356 +105,249 @@ func detectExternalIP() (string, error) {
 		if err != nil {
 			continue
 		}
-
-		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			continue
 		}
-
 		ip := strings.TrimSpace(string(body))
 		if ipRegex.MatchString(ip) {
 			return ip, nil
 		}
 	}
-
 	return "", fmt.Errorf("could not detect external IP address")
 }
 
-// ValidateIP checks if a provided IP address is valid
+// ValidateIP checks if a provided IP address is valid.
 func ValidateIP(ip string) bool {
 	return net.ParseIP(ip) != nil
 }
 
-// ValidateDNS checks if a domain is correctly pointing to an IP
-// It tries system DNS first, then falls back to public DNS servers if needed
+// ValidateDNS checks if a domain (or wildcard domain) points to a given expected IP.
+// It uses our robust DNS lookup method as a single source of truth.
 func ValidateDNS(domain, expectedIP string, logFn func(string)) bool {
 	logFn(fmt.Sprintf("Validating DNS for %s...", domain))
 
-	// First check if this is a wildcard domain request
 	isWildcard := strings.HasPrefix(domain, "*.")
-
-	// If wildcard, modify domain for testing
 	testDomain := domain
 	baseDomain := domain
+
+	// If wildcard, test a random subdomain as well.
 	if isWildcard {
-		// Extract base domain for testing
 		baseDomain = strings.TrimPrefix(domain, "*.")
-
-		// Create a random subdomain for testing the wildcard
-		randomStr := fmt.Sprintf("test-%d", time.Now().Unix())
-		testDomain = randomStr + "." + baseDomain
-
-		logFn(fmt.Sprintf("Testing wildcard *.%s using random subdomain: %s",
-			baseDomain, testDomain))
+		testDomain = fmt.Sprintf("test-%d.%s", time.Now().Unix(), baseDomain)
+		logFn(fmt.Sprintf("Testing wildcard DNS record using subdomain: %s", testDomain))
 	}
 
-	// Try with Go's default resolver first
-	logFn("Trying system DNS resolver...")
-	ips, err := trySystemResolver(testDomain)
-
-	// If system resolver fails, try public DNS servers
+	ips, err := resolveDomainIPs(testDomain, logFn)
 	if err != nil {
-		logFn(fmt.Sprintf("System DNS resolver failed: %v", err))
-		logFn("Falling back to public DNS servers...")
-		ips, err = tryPublicDNSServers(testDomain, logFn)
-
-		if err != nil {
-			logFn(fmt.Sprintf("All DNS resolution attempts failed for %s: %v", testDomain, err))
-			return false
-		}
+		logFn(fmt.Sprintf("DNS resolution failed for %s: %v", testDomain, err))
+		return false
+	}
+	if len(ips) == 0 {
+		logFn(fmt.Sprintf("No IP addresses resolved for %s", testDomain))
+		return false
 	}
 
-	// If we get here, we have some IPs
-	ipList := strings.Join(ips, ", ")
-	logFn(fmt.Sprintf("Domain %s resolves to: %s", testDomain, ipList))
-
-	// Check if any IP matches the expected IP
+	ipList := make([]string, 0, len(ips))
 	for _, ip := range ips {
-		if ip == expectedIP {
+		ipList = append(ipList, ip.String())
+	}
+	logFn(fmt.Sprintf("%s resolves to: %s", testDomain, strings.Join(ipList, ", ")))
+
+	// Check if any of the resolved IPs matches the expected IP.
+	for _, ip := range ips {
+		if ip.String() == expectedIP {
+			// If it's a wildcard, mention that specifically.
 			if isWildcard {
-				logFn(fmt.Sprintf("Wildcard DNS *.%s correctly points to %s ✓",
-					baseDomain, expectedIP))
+				logFn(fmt.Sprintf("Wildcard DNS for *.%s correctly points to %s ✓", baseDomain, expectedIP))
 			} else {
-				logFn(fmt.Sprintf("Domain %s correctly points to %s ✓",
-					domain, expectedIP))
+				logFn(fmt.Sprintf("Domain %s correctly points to %s ✓", domain, expectedIP))
 			}
 			return true
 		}
 	}
 
-	// If we get here, the domain doesn't point to the expected IP
+	// If we get here, no match found.
 	if isWildcard {
-		logFn(fmt.Sprintf("Wildcard *.%s is not correctly configured", baseDomain))
-		logFn(fmt.Sprintf("Expected: %s, found: %s", expectedIP, ipList))
-		logFn(fmt.Sprintf("Please update your wildcard DNS record for *.%s", baseDomain))
+		logFn(fmt.Sprintf("Wildcard DNS for *.%s is not correctly configured", baseDomain))
 	} else {
-		logFn(fmt.Sprintf("Domain %s does not point to expected IP", domain))
-		logFn(fmt.Sprintf("Expected: %s, found: %s", expectedIP, ipList))
-		logFn("Please update your DNS A record")
+		logFn(fmt.Sprintf("Domain %s does not point to the expected IP", domain))
 	}
-
+	logFn(fmt.Sprintf("Expected: %s, found: %s", expectedIP, strings.Join(ipList, ", ")))
 	return false
 }
 
-// trySystemResolver attempts to resolve a domain using the system's default resolver
-func trySystemResolver(domain string) ([]string, error) {
-	// Use context with timeout to prevent hanging
+// resolveDomainIPs attempts to resolve a domain's IP addresses with fallback methods:
+// 1) dig command (if available)
+// 2) nslookup command (if available)
+// 3) net.LookupIP (Go's system resolver)
+func resolveDomainIPs(domain string, logFn func(string)) ([]net.IP, error) {
+	logFn(fmt.Sprintf("Resolving IP for domain: %s", domain))
+
+	// 1) Try dig command:
+	if ips, err := resolveWithDig(domain); err == nil && len(ips) > 0 {
+		logFn(fmt.Sprintf("Found %d IP(s) via dig", len(ips)))
+		return ips, nil
+	}
+
+	// 2) Try nslookup:
+	if ips, err := resolveWithNslookup(domain); err == nil && len(ips) > 0 {
+		logFn(fmt.Sprintf("Found %d IP(s) via nslookup", len(ips)))
+		return ips, nil
+	}
+
+	// 3) Fallback to net.LookupIP:
+	ips, err := net.LookupIP(domain)
+	if err != nil {
+		return nil, fmt.Errorf("system resolver lookup failed: %w", err)
+	}
+	return ips, nil
+}
+
+// resolveWithDig uses the "dig +short" command to get A and AAAA records.
+func resolveWithDig(domain string) ([]net.IP, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Try command-based resolution first (this might bypass Go's resolver issues)
-	cmd := exec.CommandContext(ctx, "getent", "hosts", domain)
-	output, err := cmd.Output()
+	var allIPs []net.IP
 
-	if err == nil && len(output) > 0 {
-		// Parse getent output to extract IPs
-		lines := strings.Split(string(output), "\n")
-		var ips []string
-
-		for _, line := range lines {
-			fields := strings.Fields(line)
-			if len(fields) >= 1 {
-				ips = append(ips, fields[0])
-			}
-		}
-
-		if len(ips) > 0 {
-			return ips, nil
-		}
-	}
-
-	// If getent doesn't work, try Go's standard resolver
-	return net.LookupHost(domain)
-}
-
-// tryPublicDNSServers attempts to resolve a domain using public DNS servers
-func tryPublicDNSServers(domain string, logFn func(string)) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	// Create a custom resolver using reliable public DNS servers
-	for _, dnsServer := range []string{"1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53"} {
-		resolver := &net.Resolver{
-			PreferGo: true,
-			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				d := net.Dialer{
-					Timeout: time.Second * 5,
-				}
-				return d.DialContext(ctx, "udp", dnsServer)
-			},
-		}
-
-		logFn(fmt.Sprintf("Trying DNS server: %s", dnsServer))
-		ips, err := resolver.LookupHost(ctx, domain)
-
-		if err == nil && len(ips) > 0 {
-			logFn(fmt.Sprintf("Successfully resolved using %s", dnsServer))
-			return ips, nil
-		}
-
-		if err != nil {
-			logFn(fmt.Sprintf("Failed with %s: %v", dnsServer, err))
-		}
-	}
-
-	// Last resort: Try to execute dig command directly
-	logFn("Trying dig command as last resort...")
+	// A records
 	cmd := exec.CommandContext(ctx, "dig", "+short", domain, "A")
 	output, err := cmd.Output()
-
-	if err == nil && len(output) > 0 {
-		ips := strings.Split(strings.TrimSpace(string(output)), "\n")
-		// Filter out empty lines
-		var filteredIPs []string
-		for _, ip := range ips {
-			if ip != "" {
-				filteredIPs = append(filteredIPs, ip)
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		for _, line := range lines {
+			if ip := net.ParseIP(line); ip != nil {
+				allIPs = append(allIPs, ip)
 			}
 		}
+	}
 
-		if len(filteredIPs) > 0 {
-			logFn("Successfully resolved using dig command")
-			return filteredIPs, nil
+	// AAAA records
+	cmd = exec.CommandContext(ctx, "dig", "+short", domain, "AAAA")
+	output, err = cmd.Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		for _, line := range lines {
+			if ip := net.ParseIP(line); ip != nil {
+				allIPs = append(allIPs, ip)
+			}
 		}
 	}
 
-	return nil, fmt.Errorf("all resolution methods failed")
+	if len(allIPs) == 0 {
+		return nil, fmt.Errorf("dig command failed or found no IPs")
+	}
+	return allIPs, nil
 }
 
-// CheckCloudflareProxy checks if a domain is proxied through Cloudflare by fetching
-// Cloudflare's official IP ranges and checking if the domain's IPs fall within them
+// resolveWithNslookup uses the "nslookup" command to query domain A/AAAA records
+// from a couple of known DNS servers (e.g. 1.1.1.1, 8.8.8.8).
+func resolveWithNslookup(domain string) ([]net.IP, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	dnsServers := []string{"1.1.1.1", "8.8.8.8"}
+	var allIPs []net.IP
+
+	for _, server := range dnsServers {
+		cmd := exec.CommandContext(ctx, "nslookup", domain, server)
+		output, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			// Typically looks like: "Address: 1.2.3.4"
+			if strings.HasPrefix(line, "Address:") && !strings.Contains(line, "#") {
+				fields := strings.Fields(line)
+				ipStr := fields[len(fields)-1]
+				if ip := net.ParseIP(ipStr); ip != nil {
+					allIPs = append(allIPs, ip)
+				}
+			}
+		}
+		if len(allIPs) > 0 {
+			return allIPs, nil
+		}
+	}
+
+	if len(allIPs) == 0 {
+		return nil, fmt.Errorf("nslookup command failed or found no IPs")
+	}
+	return allIPs, nil
+}
+
+// TestWildcardDNS tests if both the base domain and a random subdomain
+// for your wildcard DNS point to the given external IP.
+func TestWildcardDNS(baseDomain, externalIP string, logFn func(string)) bool {
+	if !ValidateDNS(baseDomain, externalIP, logFn) {
+		logFn(fmt.Sprintf("Base domain %s is not pointing to %s", baseDomain, externalIP))
+		return false
+	}
+	logFn(fmt.Sprintf("Base domain %s is correctly configured ✓", baseDomain))
+
+	// Test random subdomain for wildcard
+	randomSubdomain := fmt.Sprintf("test-%d.%s", time.Now().Unix(), baseDomain)
+	if !ValidateDNS(randomSubdomain, externalIP, logFn) {
+		logFn(fmt.Sprintf("Wildcard DNS for *.%s is not correctly configured", baseDomain))
+		return false
+	}
+	logFn(fmt.Sprintf("Wildcard DNS for *.%s is correctly configured ✓", baseDomain))
+	return true
+}
+
+// CheckCloudflareProxy checks if a domain is proxied through Cloudflare
+// by resolving its IP, then checking if that IP is within Cloudflare's known ranges.
 func CheckCloudflareProxy(domain string, logFn func(string)) bool {
-	logFn(fmt.Sprintf("Checking if %s is using Cloudflare...", domain))
+	logFn(fmt.Sprintf("Checking if %s is using Cloudflare proxy...", domain))
 
-	// Get IP addresses using the robust resolution method
-	ips, err := resolveIPsRobustly(domain, logFn)
+	ips, err := resolveDomainIPs(domain, logFn)
 	if err != nil {
-		logFn(fmt.Sprintf("Error looking up IP addresses: %v", err))
+		logFn(fmt.Sprintf("Error resolving %s: %v", domain, err))
 		return false
 	}
-
 	if len(ips) == 0 {
-		logFn("No IP addresses found for domain")
+		logFn("No IP addresses found for domain.")
 		return false
 	}
 
-	// Fetch Cloudflare's official IP ranges
+	// Fetch Cloudflare official IP ranges (IPv4 and IPv6).
 	ipv4Ranges, ipv6Ranges, err := fetchCloudflareIPRanges(logFn)
 	if err != nil {
 		logFn(fmt.Sprintf("Error fetching Cloudflare IP ranges: %v", err))
 		return false
 	}
 
-	// Check if any IP is in Cloudflare's ranges
+	// Check whether any resolved IP is in Cloudflare's range.
 	for _, ip := range ips {
-		ipStr := ip.String()
-		logFn(fmt.Sprintf("Domain resolves to IP: %s", ipStr))
-
-		// Check IPv4 or IPv6 based on IP type
+		logFn(fmt.Sprintf("Resolved IP: %s", ip.String()))
 		if ip.To4() != nil {
-			// IPv4
-			for _, ipNet := range ipv4Ranges {
-				if ipNet.Contains(ip) {
-					logFn(fmt.Sprintf("IP %s is in Cloudflare IPv4 range ✓", ipStr))
+			// IPv4 check
+			for _, cfNet := range ipv4Ranges {
+				if cfNet.Contains(ip) {
+					logFn(fmt.Sprintf("IP %s is in Cloudflare's IPv4 range ✓", ip.String()))
 					return true
 				}
 			}
 		} else {
-			// IPv6
-			for _, ipNet := range ipv6Ranges {
-				if ipNet.Contains(ip) {
-					logFn(fmt.Sprintf("IP %s is in Cloudflare IPv6 range ✓", ipStr))
+			// IPv6 check
+			for _, cfNet := range ipv6Ranges {
+				if cfNet.Contains(ip) {
+					logFn(fmt.Sprintf("IP %s is in Cloudflare's IPv6 range ✓", ip.String()))
 					return true
 				}
 			}
 		}
 	}
 
-	logFn("Domain is not using Cloudflare proxying")
+	logFn("Domain is not using Cloudflare proxy.")
 	return false
 }
 
-// resolveIPsRobustly attempts to resolve a domain's IP addresses using multiple methods
-func resolveIPsRobustly(domain string, logFn func(string)) ([]net.IP, error) {
-	// Try system resolver first
-	logFn("Trying system DNS resolver...")
-	ips, err := net.LookupIP(domain)
-	if err == nil && len(ips) > 0 {
-		return ips, nil
-	}
-
-	if err != nil {
-		logFn(fmt.Sprintf("System DNS resolver failed: %v", err))
-	} else {
-		logFn("System DNS resolver returned no IPs")
-	}
-
-	// Try getent command
-	logFn("Trying getent hosts command...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "getent", "hosts", domain)
-	output, err := cmd.Output()
-
-	if err == nil && len(output) > 0 {
-		// Parse getent output to extract IPs
-		lines := strings.Split(string(output), "\n")
-		var parsedIPs []net.IP
-
-		for _, line := range lines {
-			fields := strings.Fields(line)
-			if len(fields) >= 1 {
-				if ip := net.ParseIP(fields[0]); ip != nil {
-					parsedIPs = append(parsedIPs, ip)
-				}
-			}
-		}
-
-		if len(parsedIPs) > 0 {
-			logFn(fmt.Sprintf("Found %d IPs using getent", len(parsedIPs)))
-			return parsedIPs, nil
-		}
-	}
-
-	// Try public DNS servers
-	logFn("Trying public DNS servers...")
-	for _, dnsServer := range []string{"1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53"} {
-		resolver := &net.Resolver{
-			PreferGo: true,
-			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				d := net.Dialer{
-					Timeout: time.Second * 5,
-				}
-				return d.DialContext(ctx, "udp", dnsServer)
-			},
-		}
-
-		logFn(fmt.Sprintf("Trying DNS server: %s", dnsServer))
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		hostnames, err := resolver.LookupHost(ctx, domain)
-		cancel()
-
-		if err == nil && len(hostnames) > 0 {
-			var resolvedIPs []net.IP
-			for _, hostname := range hostnames {
-				if ip := net.ParseIP(hostname); ip != nil {
-					resolvedIPs = append(resolvedIPs, ip)
-				}
-			}
-
-			if len(resolvedIPs) > 0 {
-				logFn(fmt.Sprintf("Found %d IPs using %s", len(resolvedIPs), dnsServer))
-				return resolvedIPs, nil
-			}
-		}
-	}
-
-	// Last resort: Try dig command
-	logFn("Trying dig command as last resort...")
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	cmd = exec.CommandContext(ctx, "dig", "+short", domain, "A")
-	output, err = cmd.Output()
-
-	var digIPs []net.IP
-	if err == nil && len(output) > 0 {
-		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-		for _, line := range lines {
-			if line != "" {
-				if ip := net.ParseIP(line); ip != nil {
-					digIPs = append(digIPs, ip)
-				}
-			}
-		}
-	}
-
-	// Also try for AAAA records (IPv6)
-	cmd = exec.CommandContext(ctx, "dig", "+short", domain, "AAAA")
-	output, err = cmd.Output()
-
-	if err == nil && len(output) > 0 {
-		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-		for _, line := range lines {
-			if line != "" {
-				if ip := net.ParseIP(line); ip != nil {
-					digIPs = append(digIPs, ip)
-				}
-			}
-		}
-	}
-
-	if len(digIPs) > 0 {
-		logFn(fmt.Sprintf("Found %d IPs using dig command", len(digIPs)))
-		return digIPs, nil
-	}
-
-	return nil, fmt.Errorf("all resolution methods failed")
-}
-
-// fetchCloudflareIPRanges fetches the latest Cloudflare IP ranges from their official URLs
+// fetchCloudflareIPRanges retrieves the official Cloudflare IPv4/IPv6 subnets.
 func fetchCloudflareIPRanges(logFn func(string)) ([]*net.IPNet, []*net.IPNet, error) {
 	ipv4URL := "https://www.cloudflare.com/ips-v4"
 	ipv6URL := "https://www.cloudflare.com/ips-v6"
@@ -486,94 +364,58 @@ func fetchCloudflareIPRanges(logFn func(string)) ([]*net.IPNet, []*net.IPNet, er
 		return nil, nil, fmt.Errorf("failed to fetch IPv6 ranges: %w", err)
 	}
 
-	// Parse CIDR ranges
 	var parsedIPv4Ranges []*net.IPNet
 	for _, cidr := range ipv4Ranges {
-		_, ipNet, err := net.ParseCIDR(cidr)
-		if err != nil {
-			logFn(fmt.Sprintf("Error parsing CIDR %s: %v", cidr, err))
-			continue
+		_, ipNet, parseErr := net.ParseCIDR(cidr)
+		if parseErr == nil {
+			parsedIPv4Ranges = append(parsedIPv4Ranges, ipNet)
+		} else {
+			logFn(fmt.Sprintf("Error parsing IPv4 CIDR %s: %v", cidr, parseErr))
 		}
-		parsedIPv4Ranges = append(parsedIPv4Ranges, ipNet)
 	}
 
 	var parsedIPv6Ranges []*net.IPNet
 	for _, cidr := range ipv6Ranges {
-		_, ipNet, err := net.ParseCIDR(cidr)
-		if err != nil {
-			logFn(fmt.Sprintf("Error parsing CIDR %s: %v", cidr, err))
-			continue
+		_, ipNet, parseErr := net.ParseCIDR(cidr)
+		if parseErr == nil {
+			parsedIPv6Ranges = append(parsedIPv6Ranges, ipNet)
+		} else {
+			logFn(fmt.Sprintf("Error parsing IPv6 CIDR %s: %v", cidr, parseErr))
 		}
-		parsedIPv6Ranges = append(parsedIPv6Ranges, ipNet)
 	}
 
-	logFn(fmt.Sprintf("Fetched %d IPv4 ranges and %d IPv6 ranges",
-		len(parsedIPv4Ranges), len(parsedIPv6Ranges)))
-
+	logFn(fmt.Sprintf("Fetched %d IPv4 ranges, %d IPv6 ranges", len(parsedIPv4Ranges), len(parsedIPv6Ranges)))
 	return parsedIPv4Ranges, parsedIPv6Ranges, nil
 }
 
-// fetchIPRanges fetches IP ranges from a URL and returns them as a slice of strings
+// fetchIPRanges is a helper that grabs a newline-delimited list of CIDRs from the given URL.
 func fetchIPRanges(url string) ([]string, error) {
-	// Create HTTP client with reasonable timeout
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	// Make the request
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	// Check if request was successful
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("bad status code: %d", resp.StatusCode)
 	}
-
-	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
+	lines := strings.Split(string(body), "\n")
 
-	// Split by newlines and clean up
-	ranges := strings.Split(string(body), "\n")
 	var cleanRanges []string
-
-	for _, r := range ranges {
-		r = strings.TrimSpace(r)
-		if r != "" {
-			cleanRanges = append(cleanRanges, r)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			cleanRanges = append(cleanRanges, line)
 		}
 	}
-
 	return cleanRanges, nil
 }
 
-// TestWildcardDNS tests if a wildcard DNS is correctly configured
-func TestWildcardDNS(baseDomain string, externalIP string, logFn func(string)) bool {
-	// Test the base domain
-	if ValidateDNS(baseDomain, externalIP, logFn) {
-		logFn(fmt.Sprintf("Base domain %s is correctly configured ✓", baseDomain))
-	} else {
-		logFn(fmt.Sprintf("Base domain %s is not pointing to %s", baseDomain, externalIP))
-		return false
-	}
-
-	// Test a random subdomain to verify wildcard configuration
-	randomSubdomain := fmt.Sprintf("test-%d.%s", time.Now().Unix(), baseDomain)
-	if ValidateDNS(randomSubdomain, externalIP, logFn) {
-		logFn(fmt.Sprintf("Wildcard DNS for *.%s is correctly configured ✓", baseDomain))
-		return true
-	} else {
-		logFn(fmt.Sprintf("Wildcard DNS for *.%s is not correctly configured", baseDomain))
-		return false
-	}
-}
-
-// RunNetworkCommand executes a network-related command and returns its output
+// RunNetworkCommand executes a network-related shell command and returns its output.
 func RunNetworkCommand(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	var out bytes.Buffer
