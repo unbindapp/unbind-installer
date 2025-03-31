@@ -60,7 +60,7 @@ func viewInstallingPackages(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -101,7 +101,7 @@ func viewInstallComplete(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }

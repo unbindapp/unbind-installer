@@ -237,7 +237,7 @@ func dnsValidationTimeout(duration time.Duration) tea.Cmd {
 
 // Update handles messages and user input
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Handle text input for domain entry
+	// Handle text input for domain entry when in DNS config state
 	if m.state == StateDNSConfig {
 		var cmd tea.Cmd
 		m.domainInput, cmd = m.domainInput.Update(msg)
@@ -248,6 +248,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.dnsInfo.Domain = m.domainInput.Value()
 
+		// If Enter was pressed, handle it separately
+		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
+			if m.dnsInfo.Domain != "" {
+				m.state = StateDNSValidation
+				m.isLoading = true
+				m.dnsInfo.ValidationStarted = true
+				m.dnsInfo.TestingStartTime = time.Now()
+
+				return m, tea.Batch(
+					m.spinner.Tick,
+					m.startDNSValidation(),
+					dnsValidationTimeout(30*time.Second),
+					m.listenForLogs(),
+				)
+			}
+		}
+
 		cmds := []tea.Cmd{cmd, m.listenForLogs()}
 		return m, tea.Batch(cmds...)
 	}
@@ -255,7 +272,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case "ctrl+c", "esc":
 			return m, tea.Quit
 		case "enter":
 			if m.state == StateWelcome {
@@ -287,23 +304,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.startDetectingIPs(),
 					m.listenForLogs(),
 				)
-			} else if m.state == StateDNSConfig {
-				// Start DNS validation
-				if m.dnsInfo != nil && m.dnsInfo.Domain != "" {
-					m.state = StateDNSValidation
-					m.isLoading = true
-					m.dnsInfo.ValidationStarted = true
-					m.dnsInfo.TestingStartTime = time.Now()
-
-					return m, tea.Batch(
-						m.spinner.Tick,
-						m.startDNSValidation(),
-						dnsValidationTimeout(30*time.Second), // 30-second timeout
-						m.listenForLogs(),
-					)
-				}
-			} else if m.state == StateDNSSuccess || m.state == StateDNSFailed {
-				// Continue to the next step
+			} else if m.state == StateDNSSuccess {
+				// Continue to the next step after successful DNS validation
+				return m, tea.Quit
+			} else if m.state == StateDNSFailed {
+				// Continue anyway despite DNS validation failure
+				m.logChan <- "Continuing without validated DNS configuration..."
 				return m, tea.Quit
 			}
 		case "r":

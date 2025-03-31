@@ -47,7 +47,7 @@ func viewDetectingIPs(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -92,9 +92,9 @@ func viewDNSConfig(m Model) string {
 	s.WriteString(m.styles.Normal.Render("3. Enter your domain below and press Enter to validate"))
 	s.WriteString("\n\n")
 
-	// Cloudflare note
+	// Cloudflare note - REMOVED the DNS only message
 	s.WriteString(m.styles.Bold.Render("Note: "))
-	s.WriteString(m.styles.Normal.Render("If you're using Cloudflare, make sure to set the proxy status to 'DNS only' (gray cloud)."))
+	s.WriteString(m.styles.Normal.Render("This will also work with Cloudflare and other proxy services."))
 	s.WriteString("\n\n")
 
 	// Domain input field
@@ -113,7 +113,7 @@ func viewDNSConfig(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -163,7 +163,7 @@ func viewDNSValidation(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -185,7 +185,7 @@ func viewDNSSuccess(m Model) string {
 		s.WriteString(m.styles.Bold.Render("Cloudflare detected: "))
 		s.WriteString(m.styles.Success.Render("Yes"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("Your domain is configured with Cloudflare which should work correctly with Unbind."))
+		s.WriteString(m.styles.Normal.Render("Your domain is configured with Cloudflare which works correctly with Unbind."))
 	} else {
 		s.WriteString(m.styles.Bold.Render("Domain: "))
 		s.WriteString(m.styles.Normal.Render(m.dnsInfo.Domain))
@@ -211,7 +211,7 @@ func viewDNSSuccess(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -248,8 +248,6 @@ func viewDNSFailed(m Model) string {
 	s.WriteString(m.styles.Normal.Render("2. Ensure the A record points to your external IP: " + m.dnsInfo.ExternalIP))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("3. DNS changes can take time to propagate (sometimes up to 24-48 hours)"))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("4. If using Cloudflare, set the proxy status to 'DNS only' (gray cloud)"))
 	s.WriteString("\n\n")
 
 	// Options
@@ -268,7 +266,7 @@ func viewDNSFailed(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }

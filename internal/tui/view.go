@@ -18,7 +18,7 @@ func viewLoading(m Model) string {
 	s.WriteString(" ")
 	s.WriteString(m.styles.Normal.Render("Detecting OS information..."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -53,7 +53,7 @@ func viewError(m Model) string {
 	}
 
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -101,7 +101,7 @@ func viewOSInfo(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }

@@ -101,7 +101,7 @@ func viewWelcome(m Model) string {
 	s.WriteString("\n\n")
 
 	// Quit option
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
