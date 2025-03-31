@@ -210,7 +210,7 @@ func (m Model) startDNSValidation() tea.Cmd {
 
 		testDomains := []string{
 			"unbind." + baseDomain,
-			"dex.*" + baseDomain,
+			"dex." + baseDomain,
 		}
 
 		// Log the validation attempt
