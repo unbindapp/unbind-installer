@@ -296,25 +296,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					detectOSInfo,
 					m.listenForLogs(),
 				)
-			} else if m.state == StateOSInfo {
-				// When Enter is pressed on the OS info screen,
-				// start installing packages
-				m.state = StateInstallingPackages
-				m.isLoading = true
-				return m, tea.Batch(
-					m.spinner.Tick,
-					m.installRequiredPackages(),
-					m.listenForLogs(),
-				)
-			} else if m.state == StateInstallComplete {
-				// Start IP detection for DNS configuration
-				m.state = StateDetectingIPs
-				m.isLoading = true
-				return m, tea.Batch(
-					m.spinner.Tick,
-					m.startDetectingIPs(),
-					m.listenForLogs(),
-				)
 			} else if m.state == StateDNSSuccess {
 				// Continue to the next step after successful DNS validation
 				return m, tea.Quit
@@ -359,8 +340,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.osInfo = msg.info
 		m.state = StateOSInfo
 		m.isLoading = false
-		return m, m.listenForLogs()
 
+		// Schedule automatic advancement after 3 seconds
+		return m, tea.Batch(
+			m.listenForLogs(),
+			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+				return installPackagesMsg{}
+			}),
+		)
 	case errMsg:
 		m.err = msg.err
 		m.state = StateError

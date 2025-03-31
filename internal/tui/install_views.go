@@ -93,15 +93,8 @@ func viewInstallComplete(m Model) string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("Your system is now ready to proceed with the next steps."))
+	s.WriteString(m.styles.Normal.Render("Now I will proceed to DNS configuration."))
 	s.WriteString("\n\n")
-
-	// Exit prompt
-	s.WriteString(m.styles.HighlightButton.Render(" Press Enter to exit "))
-	s.WriteString("\n\n")
-
-	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
 
 	return s.String()
 }
