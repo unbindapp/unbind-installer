@@ -208,37 +208,52 @@ func (m Model) startDNSValidation() tea.Cmd {
 
 		baseDomain := strings.Replace(m.dnsInfo.Domain, "*.", "", 1)
 
+		testDomains := []string{
+			"unbind." + baseDomain,
+			"dex.*" + baseDomain,
+		}
+
 		// Log the validation attempt
 		m.logChan <- "Starting DNS validation..."
 
 		// Check for Cloudflare first
-		cloudflare := network.CheckCloudflareProxy(baseDomain, func(msg string) {
-			m.logChan <- msg
-		})
-
-		// If Cloudflare is detected, consider it successful
-		if cloudflare {
-			// Also check a subdomain
-			test := "test." + baseDomain
-			cloudflare = network.CheckCloudflareProxy(test, func(msg string) {
+		cloudflareSuccessCount := 0
+		for _, domain := range testDomains {
+			cloudflare := network.CheckCloudflareProxy(domain, func(msg string) {
 				m.logChan <- msg
 			})
 
+			// If Cloudflare is detected, consider it successful
 			if cloudflare {
-				return dnsValidationCompleteMsg{
-					success:    true,
-					cloudflare: true,
-				}
+				cloudflareSuccessCount++
+			}
+		}
+		if cloudflareSuccessCount == 2 {
+			return dnsValidationCompleteMsg{
+				success:    true,
+				cloudflare: true,
 			}
 		}
 
 		// Otherwise test the wildcard DNS configuration
-		success := network.TestWildcardDNS(baseDomain, m.dnsInfo.ExternalIP, func(msg string) {
-			m.logChan <- msg
-		})
+		successCount := 0
+		for _, domain := range testDomains {
+			success := network.ValidateDNS(domain, m.dnsInfo.ExternalIP, func(msg string) {
+				m.logChan <- msg
+			})
+			if success {
+				successCount++
+			}
+		}
 
+		if successCount == 2 {
+			return dnsValidationCompleteMsg{
+				success:    true,
+				cloudflare: false,
+			}
+		}
 		return dnsValidationCompleteMsg{
-			success:    success,
+			success:    false,
 			cloudflare: false,
 		}
 	}
