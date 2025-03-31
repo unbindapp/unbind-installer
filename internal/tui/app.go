@@ -137,6 +137,8 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return self.updateErrorState(msg)
 	case StateInstallingK3S:
 		return self.updateInstallingK3SState(msg)
+	case StateInstallingCilium:
+		return self.updateInstallingCiliumState(msg)
 	default:
 		return self, self.listenForLogs()
 	}
@@ -171,6 +173,8 @@ func (self Model) View() string {
 		return viewDebugLogs(self)
 	case StateInstallingK3S:
 		return viewInstallingK3S(self)
+	case StateInstallingCilium:
+		return viewInstallingCilium(self)
 	default:
 		return viewWelcome(self)
 	}

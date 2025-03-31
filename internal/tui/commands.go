@@ -162,3 +162,20 @@ func (self Model) installK3S() tea.Cmd {
 		return k3sInstallCompleteMsg{}
 	}
 }
+
+// installCilium is a command that installs Cilium
+func (self Model) installCilium() tea.Cmd {
+	return func() tea.Msg {
+		// Create a new K3S installer
+		installer := k3s.NewCiliumInstaller(self.logChan)
+
+		// Install K3S
+		err := installer.Install()
+		if err != nil {
+			self.logChan <- fmt.Sprintf("Cilium installation failed: %s", err.Error())
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}
+		}
+
+		return k3sInstallCompleteMsg{}
+	}
+}

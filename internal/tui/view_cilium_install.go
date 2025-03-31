@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// viewInstallingK3S shows the K3S installation screen
-func viewInstallingK3S(m Model) string {
+// viewInstallingCilium shows the Cilium installation screen
+func viewInstallingCilium(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
@@ -19,7 +19,7 @@ func viewInstallingK3S(m Model) string {
 	// Show current action
 	s.WriteString(m.spinner.View())
 	s.WriteString(" ")
-	s.WriteString(m.styles.Bold.Render("Installing K3S..."))
+	s.WriteString(m.styles.Bold.Render("Installing Cilium (k3s Networking Layer)..."))
 	s.WriteString("\n\n")
 
 	// OS info if available
@@ -29,21 +29,6 @@ func viewInstallingK3S(m Model) string {
 		s.WriteString("\n\n")
 	}
 
-	// K3S components being installed
-	s.WriteString(m.styles.Bold.Render("Installing K3S with:"))
-	s.WriteString("\n")
-
-	components := []string{
-		"Disabled Flannel backend",
-		"Disabled kube-proxy",
-		"Disabled ServiceLB",
-		"Disabled Network Policy",
-		"Disabled Traefik",
-	}
-
-	for _, comp := range components {
-		s.WriteString(fmt.Sprintf(" %s %s\n", m.styles.Key.Render("•"), m.styles.Normal.Render(comp)))
-	}
 	// Installation logs if any
 	if len(m.logMessages) > 0 {
 		s.WriteString("\n")
@@ -72,24 +57,26 @@ func viewInstallingK3S(m Model) string {
 	return s.String()
 }
 
-// updateInstallingK3SState handles updates in the K3S installation state
-func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
+// updateInstallingCiliumState handles updates in the Cilium installation state
+func (m Model) updateInstallingCiliumState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, tea.Batch(cmd, m.listenForLogs())
 
-	case k3sInstallCompleteMsg:
-		// Install Cilium after K3S
-		m.state = StateInstallingCilium
-		m.isLoading = true
+	case ciliumInstallCompleteMsg:
+		// Move to the next state after Cilium installation
+		// You can decide which state to go to next, depending on your flow
+		// // ! TODO - next state
+		// m.state = StateDetectingIPs // or another appropriate state
+		// m.isLoading = true
 
-		return m, tea.Batch(
-			m.spinner.Tick,
-			m.installCilium(),
-			m.listenForLogs(),
-		)
+		// return m, tea.Batch(
+		// 	m.spinner.Tick,
+		// 	m.startDetectingIPs(),
+		// 	m.listenForLogs(),
+		// )
 
 	case errMsg:
 		m.err = msg.err
