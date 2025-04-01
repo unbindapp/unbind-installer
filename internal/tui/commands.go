@@ -197,7 +197,7 @@ func (self Model) installCilium() tea.Cmd {
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}
 		}
 
-		return k3sInstallCompleteMsg{}
+		return ciliumInstallCompleteMsg{}
 	}
 }
 
