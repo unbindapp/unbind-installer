@@ -155,6 +155,7 @@ func (self *CiliumInstaller) installCilium() error {
 	// Build the install command
 	installCmd := exec.Command(
 		"cilium", "install",
+		"--version", "v1.17.2",
 		"--set", fmt.Sprintf("k8sServiceHost=%s", self.InternalIP),
 		"--set", "k8sServicePort=6443",
 		"--set", "kubeProxyReplacement=true",
@@ -226,7 +227,7 @@ func (self *CiliumInstaller) configureLBIPPool() error {
 	poolResource := schema.GroupVersionResource{
 		Group:    "cilium.io",
 		Version:  "v2alpha1",
-		Resource: "ciliumloadbalanceripools",
+		Resource: "ciliumloadbalancerippools",
 	}
 
 	// Create the pool object
