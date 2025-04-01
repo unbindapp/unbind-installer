@@ -113,14 +113,10 @@ func viewInstallingDependencies(m Model) string {
 		if dep.Status == dependencies.StatusInstalling {
 			prog := progress.New(progress.WithWidth(progressBarWidth))
 			s.WriteString(prog.ViewAs(dep.Progress))
-
-			// Add percentage
-			s.WriteString(fmt.Sprintf(" %.0f%%", dep.Progress*100))
 		} else if dep.Status == dependencies.StatusCompleted {
 			// Show completion time
 			prog := progress.New(progress.WithWidth(progressBarWidth))
 			s.WriteString(prog.ViewAs(1.0))
-			s.WriteString(" 100%")
 
 			if !dep.StartTime.IsZero() && !dep.EndTime.IsZero() {
 				duration := dep.EndTime.Sub(dep.StartTime).Round(time.Millisecond)
