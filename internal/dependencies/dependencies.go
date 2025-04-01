@@ -168,5 +168,5 @@ func (self *DependenciesManager) logProgress(name string, progress float64, mess
 	self.sendLog(formattedMessage)
 
 	// Update the progress
-	self.updateProgress(name, message, progress)
+	self.updateProgress(name, formattedMessage, progress)
 }
