@@ -134,7 +134,7 @@ func (m Model) updateInstallingCiliumState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForProgress())
+		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForK3SProgress())
 
 	case k3s.K3SUpdateMessage:
 		// Log that we received a progress update (for debugging)
@@ -157,7 +157,7 @@ func (m Model) updateInstallingCiliumState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		return m, tea.Batch(m.listenForLogs(), m.listenForProgress())
+		return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
 
 	case ciliumInstallCompleteMsg:
 		// Move to next state after Cilium is installed
@@ -178,8 +178,8 @@ func (m Model) updateInstallingCiliumState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m, tea.Batch(m.listenForLogs(), m.listenForProgress())
+		return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
 	}
 
-	return m, tea.Batch(m.listenForLogs(), m.listenForProgress())
+	return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
 }
