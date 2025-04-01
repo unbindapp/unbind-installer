@@ -1,12 +1,13 @@
 package tui
 
 import (
+	"github.com/unbindapp/unbind-installer/internal/dependencies"
 	"github.com/unbindapp/unbind-installer/internal/network"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"k8s.io/client-go/dynamic"
 )
 
-// Basic message types
+// * Common message types
 type errMsg struct {
 	err error
 }
@@ -15,16 +16,17 @@ type logMsg struct {
 	message string
 }
 
-// State-specific messages
+// * OS check message
 type osInfoMsg struct {
 	info *osinfo.OSInfo
 }
 
+// * Package manager messages
 type installPackagesMsg struct{}
 
 type installCompleteMsg struct{}
 
-// DNS-related messages
+// * DNS-related messages
 type detectIPsMsg struct{}
 
 type detectIPsCompleteMsg struct {
@@ -44,9 +46,16 @@ type dnsValidationTimeoutMsg struct{}
 
 type manualContinueMsg struct{}
 
+// * K3S
+
 type k3sInstallCompleteMsg struct {
-	kubeConfig string
-	kubeClient *dynamic.DynamicClient
+	kubeConfig          string
+	kubeClient          *dynamic.DynamicClient
+	dependenciesManager *dependencies.DependenciesManager
 }
 
 type ciliumInstallCompleteMsg struct{}
+
+// * Dependencies
+// dependencyInstallCompleteMsg is sent when all dependencies are installed
+type dependencyInstallCompleteMsg struct{}

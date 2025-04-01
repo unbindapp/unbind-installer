@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unbindapp/unbind-installer/internal/dependencies"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"k8s.io/client-go/dynamic"
 )
@@ -34,8 +35,13 @@ type Model struct {
 	domainInput textinput.Model
 
 	// Kube client
-	kubeConfig string
-	kubeClient *dynamic.DynamicClient
+	kubeConfig          string
+	kubeClient          *dynamic.DynamicClient
+	dependenciesManager *dependencies.DependenciesManager
+
+	// Dependencies after foundation is laid (helm charts, etc.)
+	dependencies []Dependency
+	progressChan chan dependencies.DependencyUpdateMsg
 }
 
 // NewModel initializes a new Model
@@ -51,17 +57,28 @@ func NewModel() Model {
 
 	logChan := make(chan string, 100) // Buffer for log messages
 
+	progressChan := make(chan dependencies.DependencyUpdateMsg)
+
 	// Initialize domain input
 	domainInput := initializeDomainInput()
 
 	return Model{
-		state:       StateWelcome,
-		spinner:     s,
-		isLoading:   false,
-		styles:      styles,
-		logMessages: []string{},
-		logChan:     logChan,
-		domainInput: domainInput,
+		state:        StateWelcome,
+		spinner:      s,
+		isLoading:    false,
+		styles:       styles,
+		logMessages:  []string{},
+		logChan:      logChan,
+		progressChan: progressChan,
+		domainInput:  domainInput,
+		dependencies: []Dependency{
+			{
+				Name:        "longhorn",
+				Description: "Cloud native distributed storage",
+				Status:      dependencies.StatusPending,
+				Progress:    0.0,
+			},
+		},
 	}
 }
 
@@ -142,6 +159,8 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return self.updateInstallingK3SState(msg)
 	case StateInstallingCilium:
 		return self.updateInstallingCiliumState(msg)
+	case StateInstallingDependencies:
+		return self.updateInstallingDependenciesState(msg)
 	default:
 		return self, self.listenForLogs()
 	}
@@ -178,27 +197,11 @@ func (self Model) View() string {
 		return viewInstallingK3S(self)
 	case StateInstallingCilium:
 		return viewInstallingCilium(self)
+	case StateInstallingDependencies:
+		return viewInstallingDependencies(self)
 	default:
 		return viewWelcome(self)
 	}
-}
-
-// Helper methods for state transitions and utility functions
-func (self *Model) handleGlobalKeyEvents(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "ctrl+c", "q", "esc":
-		return tea.Quit
-	case "d":
-		// Toggle debug logs view
-		if self.state != StateDebugLogs {
-			self.previousState = self.state
-			self.state = StateDebugLogs
-		} else {
-			self.state = self.previousState
-		}
-		return nil
-	}
-	return nil
 }
 
 // UpdateDomain updates the domain in the DNS info

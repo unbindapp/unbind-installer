@@ -17,6 +17,7 @@ var (
 	ErrDistributionDetectionFailed = NewCustomError(ErrTypeDistributionDetectionFailed, "")
 	ErrUnsupportedDistribution     = NewCustomError(ErrTypeUnsupportedDistribution, "")
 	ErrUnsupportedVersion          = NewCustomError(ErrTypeUnsupportedVersion, "")
+	ErrDependencyInstallFailed     = NewCustomError(ErrTypeDependencyInstallFailed, "")
 )
 
 // More dynamic errors
@@ -27,6 +28,7 @@ const (
 	ErrTypeUnsupportedDistribution
 	ErrTypeUnsupportedVersion
 	ErrTypeK3sInstallFailed
+	ErrTypeDependencyInstallFailed
 )
 
 var errorTypeStrings = map[ErrorType]string{
@@ -36,6 +38,7 @@ var errorTypeStrings = map[ErrorType]string{
 	ErrTypeUnsupportedDistribution:     "ErrUnsupportedDistribution",
 	ErrTypeUnsupportedVersion:          "ErrUnsupportedVersion",
 	ErrTypeK3sInstallFailed:            "ErrK3sInstallFailed",
+	ErrTypeDependencyInstallFailed:     "ErrDependencyInstallFailed",
 }
 
 func (e ErrorType) String() string {

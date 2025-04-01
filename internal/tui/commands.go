@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unbindapp/unbind-installer/internal/dependencies"
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
 	"github.com/unbindapp/unbind-installer/internal/k3s"
 	"github.com/unbindapp/unbind-installer/internal/network"
@@ -167,9 +169,17 @@ func (self Model) installK3S() tea.Cmd {
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K8s client creation failed: %s", err.Error()))}
 		}
 
+		// create dependencies manager
+		dm, err := dependencies.NewDependenciesManager(kubeConfig, self.logChan, self.progressChan)
+		if err != nil {
+			self.logChan <- fmt.Sprintf("Dependencies manager creation failed: %s", err.Error())
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("Dependencies manager creation failed: %s", err.Error()))}
+		}
+
 		return k3sInstallCompleteMsg{
-			kubeConfig: kubeConfig,
-			kubeClient: client,
+			kubeConfig:          kubeConfig,
+			kubeClient:          client,
+			dependenciesManager: dm,
 		}
 	}
 }
@@ -188,5 +198,25 @@ func (self Model) installCilium() tea.Cmd {
 		}
 
 		return k3sInstallCompleteMsg{}
+	}
+}
+
+// installDependencies is a command that installs dependencies
+func (self Model) installDependencies() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		for _, dep := range self.dependencies {
+			switch dep.Name {
+			case "longhorn":
+				err := self.dependenciesManager.InstallLonghornWithSteps(ctx)
+				if err != nil {
+					self.logChan <- fmt.Sprintf("Dependency installation failed: %s", err.Error())
+					return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeDependencyInstallFailed, fmt.Sprintf("Dependency installation failed: %s", err.Error()))}
+				}
+			}
+		}
+
+		return dependencyInstallCompleteMsg{}
 	}
 }

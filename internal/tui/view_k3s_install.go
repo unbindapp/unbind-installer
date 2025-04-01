@@ -86,6 +86,7 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = true
 		m.kubeClient = msg.kubeClient
 		m.kubeConfig = msg.kubeConfig
+		m.dependenciesManager = msg.dependenciesManager
 
 		return m, tea.Batch(
 			m.spinner.Tick,

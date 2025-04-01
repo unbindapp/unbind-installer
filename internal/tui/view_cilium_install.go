@@ -66,17 +66,14 @@ func (m Model) updateInstallingCiliumState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, m.listenForLogs())
 
 	case ciliumInstallCompleteMsg:
-		// Move to the next state after Cilium installation
-		// You can decide which state to go to next, depending on your flow
-		// // ! TODO - next state
-		// m.state = StateDetectingIPs // or another appropriate state
-		// m.isLoading = true
+		m.state = StateInstallingDependencies
+		m.isLoading = true
 
-		// return m, tea.Batch(
-		// 	m.spinner.Tick,
-		// 	m.startDetectingIPs(),
-		// 	m.listenForLogs(),
-		// )
+		return m, tea.Batch(
+			m.spinner.Tick,
+			m.installDependencies(),
+			m.listenForLogs(),
+		)
 
 	case errMsg:
 		m.err = msg.err
