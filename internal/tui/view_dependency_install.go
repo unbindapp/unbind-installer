@@ -171,9 +171,16 @@ func (self Model) updateInstallingDependenciesState(msg tea.Msg) (tea.Model, tea
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		self.spinner, cmd = self.spinner.Update(msg)
-		return self, tea.Batch(cmd, self.listenForLogs())
+		return self, tea.Batch(cmd, self.listenForLogs(), self.listenForProgress())
 
 	case dependencies.DependencyUpdateMsg:
+		// Log that we received a progress update (for debugging)
+		self.logMessages = append(self.logMessages,
+			"Received progress update for "+msg.Name+
+				" - Status: "+string(msg.Status)+
+				" - Progress: "+fmt.Sprintf("%.1f%%", msg.Progress*100))
+
+		// Update the dependency status
 		self.UpdateDependency(msg.Name, msg.Status, msg.Progress, msg.Error)
 
 		// Check if all dependencies are installed
@@ -182,18 +189,17 @@ func (self Model) updateInstallingDependenciesState(msg tea.Msg) (tea.Model, tea
 				return dependencyInstallCompleteMsg{}
 			}
 		}
-		return self, self.listenForLogs()
+		return self, tea.Batch(self.listenForLogs(), self.listenForProgress())
 
 	case dependencyInstallCompleteMsg:
 		// Move to the next state after all dependencies are installed
 		// You can decide which state to go to next, depending on your flow
 		// self.state = StateNextStep
 		// self.isLoading = false
-		// return self, tea.Batch(
-		//     self.listenForLogs(),
-		//     self.startNextStep(),
-		// )
-		return self, self.listenForLogs()
+		return self, tea.Batch(
+			self.listenForLogs(),
+			self.listenForProgress(),
+		)
 
 	case errMsg:
 		self.err = msg.err
@@ -204,8 +210,8 @@ func (self Model) updateInstallingDependenciesState(msg tea.Msg) (tea.Model, tea
 	case tea.WindowSizeMsg:
 		self.width = msg.Width
 		self.height = msg.Height
-		return self, self.listenForLogs()
+		return self, tea.Batch(self.listenForLogs(), self.listenForProgress())
 	}
 
-	return self, self.listenForLogs()
+	return self, tea.Batch(self.listenForLogs(), self.listenForProgress())
 }

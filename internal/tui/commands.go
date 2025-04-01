@@ -36,6 +36,23 @@ func (self Model) listenForLogs() tea.Cmd {
 	}
 }
 
+// listenForProgress returns a command that listens for progress updates
+func (self Model) listenForProgress() tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg, ok := <-self.progressChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+			return msg
+		default:
+			// Don't block if no message is available
+			return nil
+		}
+	}
+}
+
 // detectOSInfo is a command that gets OS information
 func detectOSInfo() tea.Msg {
 	if os.Geteuid() != 0 {
@@ -239,17 +256,6 @@ func (self Model) installDependencies() tea.Cmd {
 
 			switch dep.Name {
 			case "longhorn":
-				self.logChan <- "Installing Longhorn..."
-				// For debugging, update progress directly
-				self.progressChan <- dependencies.DependencyUpdateMsg{
-					Name:     "longhorn",
-					Status:   dependencies.StatusInstalling,
-					Progress: 0.1,
-				}
-
-				// Log what we're about to do
-				self.logChan <- "Calling InstallLonghornWithSteps..."
-
 				// Install longhorn
 				err := self.dependenciesManager.InstallLonghornWithSteps(ctx)
 				if err != nil {

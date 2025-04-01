@@ -86,6 +86,7 @@ func NewModel() Model {
 func (self Model) Init() tea.Cmd {
 	return tea.Batch(
 		self.listenForLogs(),
+		self.listenForProgress(),
 	)
 }
 
