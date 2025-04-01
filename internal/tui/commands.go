@@ -239,6 +239,7 @@ func (self Model) installDependencies() tea.Cmd {
 
 			switch dep.Name {
 			case "longhorn":
+				self.logChan <- "Installing Longhorn..."
 				// For debugging, update progress directly
 				self.progressChan <- dependencies.DependencyUpdateMsg{
 					Name:     "longhorn",
