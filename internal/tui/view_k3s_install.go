@@ -126,27 +126,6 @@ func viewInstallingK3S(m Model) string {
 		s.WriteString("\n")
 	}
 
-	// Installation logs if any
-	if len(m.logMessages) > 0 {
-		s.WriteString(m.styles.Bold.Render("Installation logs:"))
-		s.WriteString("\n")
-
-		// Show last 5 log messages (or fewer if there aren't that many)
-		startIdx := 0
-		if len(m.logMessages) > 5 {
-			startIdx = len(m.logMessages) - 5
-		}
-		for _, msg := range m.logMessages[startIdx:] {
-			// Truncate the message if it's too long
-			const maxLength = 80 // Reasonable terminal width
-			displayMsg := msg
-			if len(msg) > maxLength {
-				displayMsg = msg[:maxLength-3] + "..."
-			}
-			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
-		}
-	}
-
 	return s.String()
 }
 

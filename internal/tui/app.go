@@ -43,6 +43,7 @@ type Model struct {
 	// Progress statuses
 	k3sProgressChan chan k3s.K3SUpdateMessage
 	k3sProgress     k3s.K3SUpdateMessage
+	ciliumProgress  k3s.K3SUpdateMessage
 
 	// Dependencies after foundation is laid (helm charts, etc.)
 	dependencies []Dependency
@@ -80,6 +81,11 @@ func NewModel() Model {
 			Progress:    0.0,
 			Status:      "pending",
 			Description: "Initializing K3S installation",
+		},
+		ciliumProgress: k3s.K3SUpdateMessage{
+			Progress:    0.0,
+			Status:      "pending",
+			Description: "Initializing Cilium installation",
 		},
 		domainInput: domainInput,
 		dependencies: []Dependency{

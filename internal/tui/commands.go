@@ -204,10 +204,14 @@ func (self Model) installK3S() tea.Cmd {
 func (self Model) installCilium() tea.Cmd {
 	return func() tea.Msg {
 		// Create a new K3S installer
-		installer := k3s.NewCiliumInstaller(self.logChan, self.kubeConfig, self.kubeClient, self.dnsInfo.InternalIP, self.dnsInfo.CIDR)
+		installer := k3s.NewCiliumInstaller(self.logChan, self.k3sProgressChan, self.kubeConfig, self.kubeClient, self.dnsInfo.InternalIP, self.dnsInfo.CIDR)
+
+		// Create a context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
 
 		// Install K3S
-		err := installer.Install()
+		err := installer.Install(ctx)
 		if err != nil {
 			self.logChan <- fmt.Sprintf("Cilium installation failed: %s", err.Error())
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}
