@@ -126,7 +126,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 	steps := []InstallationStep{
 		{
 			Description: "Determining latest Cilium CLI version",
-			Progress:    0.10,
+			Progress:    0.05,
 			Action: func(ctx context.Context) error {
 				// Get the latest stable version
 				resp, err := http.Get("https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt")
@@ -151,7 +151,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 		},
 		{
 			Description: "Downloading Cilium CLI",
-			Progress:    0.20,
+			Progress:    0.10,
 			Action: func(ctx context.Context) error {
 				// Get the latest stable version first (needed for URL construction)
 				resp, err := http.Get("https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt")
@@ -190,7 +190,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 		},
 		{
 			Description: "Verifying Cilium CLI checksum",
-			Progress:    0.30,
+			Progress:    0.12,
 			Action: func(ctx context.Context) error {
 				tarballPath := fmt.Sprintf("/tmp/cilium-linux-%s.tar.gz", runtime.GOARCH)
 				shaPath := tarballPath + ".sha256sum"
@@ -206,7 +206,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 		},
 		{
 			Description: "Extracting Cilium CLI",
-			Progress:    0.40,
+			Progress:    0.15,
 			Action: func(ctx context.Context) error {
 				tarballPath := fmt.Sprintf("/tmp/cilium-linux-%s.tar.gz", runtime.GOARCH)
 
@@ -236,7 +236,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 		},
 		{
 			Description: "Installing Cilium CNI",
-			Progress:    0.50,
+			Progress:    0.20,
 			Action: func(ctx context.Context) error {
 				// Build the install command
 				installCmd := exec.CommandContext(ctx,
@@ -265,7 +265,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 				installDone := make(chan error, 1)
 
 				go func() {
-					currentProgress := 0.50
+					currentProgress := 0.20
 
 					ticker := time.NewTicker(2 * time.Second)
 					defer ticker.Stop()
@@ -273,8 +273,9 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 					for {
 						select {
 						case <-ticker.C:
-							if currentProgress < 0.70 {
-								currentProgress += 0.03
+							if currentProgress < 0.40 {
+								// Slower progress increments for installation
+								currentProgress += 0.01
 								self.logProgress(currentProgress, "installing", self.state.lastMsg.Description, nil)
 							}
 						case <-installDone:
@@ -308,7 +309,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 		},
 		{
 			Description: "Waiting for Cilium to be ready",
-			Progress:    0.75,
+			Progress:    0.40,
 			Action: func(ctx context.Context) error {
 				// Wait for Cilium to be ready
 				statusCmd := exec.CommandContext(ctx, "cilium", "status", "--wait")
@@ -320,11 +321,10 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 				statusCmd.Stderr = &statusErrBuffer
 
 				// Start progress updates during wait
-				waitStartTime := time.Now()
 				waitDone := make(chan error, 1)
 
 				go func() {
-					currentProgress := 0.75
+					currentProgress := 0.40
 
 					ticker := time.NewTicker(2 * time.Second)
 					defer ticker.Stop()
@@ -333,10 +333,8 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 						select {
 						case <-ticker.C:
 							if currentProgress < 0.85 {
-								currentProgress += 0.02
-								elapsed := time.Since(waitStartTime).Round(time.Second)
-								updatedDescription := fmt.Sprintf("Waiting for Cilium to be ready (elapsed: %v)...", elapsed)
-								self.logProgress(currentProgress, "installing", updatedDescription, nil)
+								currentProgress += 0.5
+								self.logProgress(currentProgress, "installing", self.state.lastMsg.Description, nil)
 							}
 						case <-waitDone:
 							return

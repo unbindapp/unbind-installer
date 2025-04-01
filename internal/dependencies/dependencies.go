@@ -101,21 +101,23 @@ const (
 
 // DependencyUpdateMsg is sent when a dependency status changes
 type DependencyUpdateMsg struct {
-	Name     string
-	Status   DependencyStatus
-	Progress float64
-	Error    error
+	Name        string
+	Status      DependencyStatus
+	Description string
+	Progress    float64
+	Error       error
 }
 
 // DependencyInstallCompleteMsg is sent when all dependencies are installed
 type DependencyInstallCompleteMsg struct{}
 
 // updateProgress updates the progress of a dependency
-func (self *DependenciesManager) updateProgress(name string, progress float64) {
+func (self *DependenciesManager) updateProgress(name string, description string, progress float64) {
 	self.progressChan <- DependencyUpdateMsg{
-		Name:     name,
-		Status:   StatusInstalling,
-		Progress: progress,
+		Name:        name,
+		Status:      StatusInstalling,
+		Description: description,
+		Progress:    progress,
 	}
 }
 
@@ -166,5 +168,5 @@ func (self *DependenciesManager) logProgress(name string, progress float64, mess
 	self.sendLog(formattedMessage)
 
 	// Update the progress
-	self.updateProgress(name, progress)
+	self.updateProgress(name, message, progress)
 }

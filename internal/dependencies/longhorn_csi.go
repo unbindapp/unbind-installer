@@ -162,7 +162,7 @@ func (self *DependenciesManager) installLonghornChart(ctx context.Context, opts 
 				case <-ticker.C:
 					if currentProgress < 0.9 {
 						currentProgress += 0.05
-						self.updateProgress(opts.ReleaseName, currentProgress)
+						self.updateProgress(opts.ReleaseName, "", currentProgress)
 						self.sendLog(fmt.Sprintf("Still installing %s (elapsed: %v)...",
 							opts.ChartName, time.Since(installStartTime).Round(time.Second)))
 					}

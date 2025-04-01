@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,10 +37,11 @@ type Dependency struct {
 	Error       error
 	StartTime   time.Time
 	EndTime     time.Time
+	StepHistory []string
 }
 
 // UpdateDependency updates the status of a dependency
-func (self *Model) UpdateDependency(name string, status dependencies.DependencyStatus, progress float64, err error) {
+func (self *Model) UpdateDependency(name string, status dependencies.DependencyStatus, progress float64, description string, err error) {
 	for i, dep := range self.dependencies {
 		if dep.Name == name {
 			self.dependencies[i].Status = status
@@ -55,6 +57,10 @@ func (self *Model) UpdateDependency(name string, status dependencies.DependencyS
 			}
 
 			self.dependencies[i].Error = err
+
+			if description != "" && !slices.Contains(self.dependencies[i].StepHistory, description) {
+				self.dependencies[i].StepHistory = append(self.dependencies[i].StepHistory, description)
+			}
 			break
 		}
 	}
@@ -149,29 +155,24 @@ func viewInstallingDependencies(m Model) string {
 			}
 		}
 
-		s.WriteString("\n\n")
-	}
+		// Display installation steps (history)
+		if len(dep.StepHistory) > 0 {
+			s.WriteString(m.styles.Bold.Render("Installation steps:"))
+			s.WriteString("\n")
 
-	// Installation logs if any
-	if len(m.logMessages) > 0 {
-		s.WriteString("\n")
-		s.WriteString(m.styles.Bold.Render("Installation logs:"))
-		s.WriteString("\n")
-
-		// Show last 5 log messages (or fewer if there aren't that many)
-		startIdx := 0
-		if len(m.logMessages) > 5 {
-			startIdx = len(m.logMessages) - 5
-		}
-		for _, msg := range m.logMessages[startIdx:] {
-			// Truncate the message if it's too long
-			const maxLength = 80 // Reasonable terminal width
-			displayMsg := msg
-			if len(msg) > maxLength {
-				displayMsg = msg[:maxLength-3] + "..."
+			// Show last 3 steps
+			startIdx := 0
+			if len(m.ciliumProgress.StepHistory) > 3 {
+				startIdx = len(m.ciliumProgress.StepHistory) - 3
 			}
-			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
+
+			for i, step := range m.ciliumProgress.StepHistory[startIdx:] {
+				s.WriteString(fmt.Sprintf("  %d. %s\n", startIdx+i+1, m.styles.Subtle.Render(step)))
+			}
+			s.WriteString("\n")
 		}
+
+		s.WriteString("\n\n")
 	}
 
 	return s.String()
@@ -193,7 +194,7 @@ func (self Model) updateInstallingDependenciesState(msg tea.Msg) (tea.Model, tea
 				" - Progress: "+fmt.Sprintf("%.1f%%", msg.Progress*100))
 
 		// Update the dependency status
-		self.UpdateDependency(msg.Name, msg.Status, msg.Progress, msg.Error)
+		self.UpdateDependency(msg.Name, msg.Status, msg.Progress, msg.Description, msg.Error)
 
 		// Check if all dependencies are installed
 		if self.AllDependenciesComplete() {
