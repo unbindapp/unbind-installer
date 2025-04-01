@@ -326,7 +326,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 				go func() {
 					currentProgress := 0.40
 
-					ticker := time.NewTicker(2 * time.Second)
+					ticker := time.NewTicker(3 * time.Second)
 					defer ticker.Stop()
 
 					for {
