@@ -2,10 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unbindapp/unbind-installer/internal/k3s"
@@ -85,11 +85,11 @@ func viewInstallingK3S(m Model) string {
 
 	// Progress bar for installing K3S
 	if m.k3sProgress.Status == "installing" {
-		prog := progress.New(progress.WithWidth(progressBarWidth))
+		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(m.k3sProgress.Progress))
 	} else if m.k3sProgress.Status == "completed" {
 		// Show completion progress and time
-		prog := progress.New(progress.WithWidth(progressBarWidth))
+		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(1.0))
 
 		if !m.k3sProgress.StartTime.IsZero() && !m.k3sProgress.EndTime.IsZero() {
@@ -98,7 +98,7 @@ func viewInstallingK3S(m Model) string {
 		}
 	} else if m.k3sProgress.Status == "failed" {
 		// Show error message
-		prog := progress.New(progress.WithWidth(progressBarWidth))
+		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(m.k3sProgress.Progress))
 		s.WriteString(" Failed")
 
@@ -139,7 +139,9 @@ func (self *Model) updateK3SInstall(msg k3s.K3SUpdateMessage) {
 		self.k3sProgress.Description = msg.Description
 
 		// Add to steps history
-		self.k3sProgress.StepHistory = append(self.k3sProgress.StepHistory, msg.Description)
+		if !slices.Contains(self.k3sProgress.StepHistory, msg.Description) {
+			self.k3sProgress.StepHistory = append(self.k3sProgress.StepHistory, msg.Description)
+		}
 	}
 
 	self.k3sProgress.Error = msg.Error

@@ -262,7 +262,6 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 				self.log(fmt.Sprintf("Running command: %s", installCmd.String()))
 
 				// Start progress updates during installation
-				installStartTime := time.Now()
 				installDone := make(chan error, 1)
 
 				go func() {
@@ -276,9 +275,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 						case <-ticker.C:
 							if currentProgress < 0.70 {
 								currentProgress += 0.03
-								elapsed := time.Since(installStartTime).Round(time.Second)
-								updatedDescription := fmt.Sprintf("Installing Cilium CNI (elapsed: %v)...", elapsed)
-								self.logProgress(currentProgress, "installing", updatedDescription, nil)
+								self.logProgress(currentProgress, "installing", self.state.lastMsg.Description, nil)
 							}
 						case <-installDone:
 							return

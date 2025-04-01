@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -90,4 +91,14 @@ type Styles struct {
 	SpinnerStyle    lipgloss.Style
 	Success         lipgloss.Style
 	HighlightButton lipgloss.Style
+}
+
+// Add a method to create a themed progress bar to the Styles struct
+func (s Styles) NewThemedProgress(width int) progress.Model {
+	// Create a new progress bar with themed colors
+	return progress.New(
+		progress.WithDefaultGradient(), // Use the default gradient for the filled part
+		progress.WithWidth(width),      // Set the width
+		progress.WithGradient(DefaultTheme().Secondary, DefaultTheme().Accent),
+	)
 }

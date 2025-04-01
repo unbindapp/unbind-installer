@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unbindapp/unbind-installer/internal/dependencies"
@@ -128,11 +127,11 @@ func viewInstallingDependencies(m Model) string {
 
 		// Progress bar for installing dependencies
 		if dep.Status == dependencies.StatusInstalling {
-			prog := progress.New(progress.WithWidth(progressBarWidth))
+			prog := m.styles.NewThemedProgress(progressBarWidth)
 			s.WriteString(prog.ViewAs(dep.Progress))
 		} else if dep.Status == dependencies.StatusCompleted {
 			// Show completion time
-			prog := progress.New(progress.WithWidth(progressBarWidth))
+			prog := m.styles.NewThemedProgress(progressBarWidth)
 			s.WriteString(prog.ViewAs(1.0))
 
 			if !dep.StartTime.IsZero() && !dep.EndTime.IsZero() {
@@ -141,7 +140,7 @@ func viewInstallingDependencies(m Model) string {
 			}
 		} else if dep.Status == dependencies.StatusFailed {
 			// Show error message
-			prog := progress.New(progress.WithWidth(progressBarWidth))
+			prog := m.styles.NewThemedProgress(progressBarWidth)
 			s.WriteString(prog.ViewAs(dep.Progress))
 			s.WriteString(" Failed")
 

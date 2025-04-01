@@ -2,10 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unbindapp/unbind-installer/internal/k3s"
@@ -68,11 +68,11 @@ func viewInstallingCilium(m Model) string {
 
 	// Progress bar for installing Cilium
 	if m.ciliumProgress.Status == "installing" {
-		prog := progress.New(progress.WithWidth(progressBarWidth))
+		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(m.ciliumProgress.Progress))
 	} else if m.ciliumProgress.Status == "completed" {
 		// Show completion progress and time
-		prog := progress.New(progress.WithWidth(progressBarWidth))
+		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(1.0))
 
 		if !m.ciliumProgress.StartTime.IsZero() && !m.ciliumProgress.EndTime.IsZero() {
@@ -81,7 +81,7 @@ func viewInstallingCilium(m Model) string {
 		}
 	} else if m.ciliumProgress.Status == "failed" {
 		// Show error message
-		prog := progress.New(progress.WithWidth(progressBarWidth))
+		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(m.ciliumProgress.Progress))
 		s.WriteString(" Failed")
 
@@ -122,7 +122,9 @@ func (self *Model) updateCiliumInstall(msg k3s.K3SUpdateMessage) {
 		self.ciliumProgress.Description = msg.Description
 
 		// Add to steps history
-		self.ciliumProgress.StepHistory = append(self.ciliumProgress.StepHistory, msg.Description)
+		if !slices.Contains(self.ciliumProgress.StepHistory, msg.Description) {
+			self.ciliumProgress.StepHistory = append(self.ciliumProgress.StepHistory, msg.Description)
+		}
 	}
 
 	self.ciliumProgress.Error = msg.Error

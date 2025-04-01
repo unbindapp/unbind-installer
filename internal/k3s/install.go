@@ -153,7 +153,6 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 				installCmd := exec.CommandContext(ctx, "/bin/sh", "/tmp/k3s-installer.sh")
 				installCmd.Env = append(os.Environ(), fmt.Sprintf("INSTALL_K3S_EXEC=%s", k3sInstallFlags))
 
-				installStartTime := time.Now()
 				installDone := make(chan error, 1)
 
 				go func() {
@@ -167,9 +166,7 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 						case <-ticker.C:
 							if currentProgress < 0.35 {
 								currentProgress += 0.03
-								elapsed := time.Since(installStartTime).Round(time.Second)
-								updatedDescription := fmt.Sprintf("Running K3S installer (elapsed: %v)...", elapsed)
-								self.logProgress(currentProgress, "installing", updatedDescription, nil)
+								self.logProgress(currentProgress, "installing", self.state.lastMsg.Description, nil)
 							}
 						case <-installDone:
 							return
