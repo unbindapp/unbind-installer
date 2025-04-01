@@ -36,23 +36,6 @@ func (self Model) listenForLogs() tea.Cmd {
 	}
 }
 
-// listenForProgress returns a command that listens for progress updates
-func (self Model) listenForProgress() tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case msg, ok := <-self.progressChan:
-			if !ok {
-				// Channel closed
-				return nil
-			}
-			return msg
-		default:
-			// Don't block if no message is available
-			return nil
-		}
-	}
-}
-
 // detectOSInfo is a command that gets OS information
 func detectOSInfo() tea.Msg {
 	if os.Geteuid() != 0 {
@@ -182,10 +165,14 @@ func dnsValidationTimeout(duration time.Duration) tea.Cmd {
 func (self Model) installK3S() tea.Cmd {
 	return func() tea.Msg {
 		// Create a new K3S installer
-		installer := k3s.NewInstaller(self.logChan)
+		installer := k3s.NewInstaller(self.logChan, self.k3sProgressChan)
+
+		// Create a context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
 
 		// Install K3S
-		kubeConfig, err := installer.Install()
+		kubeConfig, err := installer.Install(ctx)
 		if err != nil {
 			self.logChan <- fmt.Sprintf("K3S installation failed: %s", err.Error())
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}

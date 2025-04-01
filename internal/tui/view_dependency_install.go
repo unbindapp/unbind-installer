@@ -11,6 +11,23 @@ import (
 	"github.com/unbindapp/unbind-installer/internal/dependencies"
 )
 
+// listenForProgress returns a command that listens for progress updates
+func (self Model) listenForProgress() tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg, ok := <-self.progressChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+			return msg
+		default:
+			// Don't block if no message is available
+			return nil
+		}
+	}
+}
+
 // Dependency represents a dependency to be installed
 type Dependency struct {
 	Name        string

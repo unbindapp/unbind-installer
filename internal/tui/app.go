@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unbindapp/unbind-installer/internal/dependencies"
+	"github.com/unbindapp/unbind-installer/internal/k3s"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"k8s.io/client-go/dynamic"
 )
@@ -39,6 +40,10 @@ type Model struct {
 	kubeClient          *dynamic.DynamicClient
 	dependenciesManager *dependencies.DependenciesManager
 
+	// Progress statuses
+	k3sProgressChan chan k3s.K3SUpdateMessage
+	k3sProgress     k3s.K3SUpdateMessage
+
 	// Dependencies after foundation is laid (helm charts, etc.)
 	dependencies []Dependency
 	progressChan chan dependencies.DependencyUpdateMsg
@@ -63,14 +68,20 @@ func NewModel() Model {
 	domainInput := initializeDomainInput()
 
 	return Model{
-		state:        StateWelcome,
-		spinner:      s,
-		isLoading:    false,
-		styles:       styles,
-		logMessages:  []string{},
-		logChan:      logChan,
-		progressChan: progressChan,
-		domainInput:  domainInput,
+		state:           StateWelcome,
+		spinner:         s,
+		isLoading:       false,
+		styles:          styles,
+		logMessages:     []string{},
+		logChan:         logChan,
+		progressChan:    progressChan,
+		k3sProgressChan: make(chan k3s.K3SUpdateMessage),
+		k3sProgress: k3s.K3SUpdateMessage{
+			Progress:    0.0,
+			Status:      "pending",
+			Description: "Initializing K3S installation",
+		},
+		domainInput: domainInput,
 		dependencies: []Dependency{
 			{
 				Name:        "longhorn",
@@ -87,6 +98,7 @@ func (self Model) Init() tea.Cmd {
 	return tea.Batch(
 		self.listenForLogs(),
 		self.listenForProgress(),
+		self.listenForK3SProgress(),
 	)
 }
 
