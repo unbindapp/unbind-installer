@@ -333,7 +333,7 @@ func (self *CiliumInstaller) Install(ctx context.Context) error {
 						select {
 						case <-ticker.C:
 							if currentProgress < 0.85 {
-								currentProgress += 0.5
+								currentProgress += 0.05
 								self.logProgress(currentProgress, "installing", self.state.lastMsg.Description, nil)
 							}
 						case <-waitDone:
