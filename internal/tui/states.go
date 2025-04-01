@@ -27,6 +27,7 @@ const (
 type dnsInfo struct {
 	InternalIP         string
 	ExternalIP         string
+	CIDR               string
 	Domain             string
 	ValidationStarted  bool
 	ValidationSuccess  bool

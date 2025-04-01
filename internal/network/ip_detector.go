@@ -16,6 +16,7 @@ import (
 type IPInfo struct {
 	InternalIP string
 	ExternalIP string
+	CIDR       string
 }
 
 // DetectIPs attempts to detect the internal and external IP addresses
@@ -36,10 +37,22 @@ func DetectIPs(logFn func(string)) (*IPInfo, error) {
 	logFn("Detecting external IP address...")
 	externalIP, err := detectExternalIP()
 	if err != nil {
-		logFn(fmt.Sprintf("Warning: Could not auto-detect external IP: %v", err))
+		logFn(fmt.Sprintf("Error: Could not auto-detect external IP: %v", err))
+		return nil, err
 	} else {
 		ipInfo.ExternalIP = externalIP
 		logFn(fmt.Sprintf("Detected external IP: %s", externalIP))
+	}
+
+	// Detect network CIDR
+	logFn("Detecting network CIDR...")
+	networkCIDR, err := detectNetworkCIDR()
+	if err != nil {
+		logFn(fmt.Sprintf("Error: Could not auto-detect network CIDR: %v", err))
+		return nil, err
+	} else {
+		ipInfo.CIDR = networkCIDR
+		logFn(fmt.Sprintf("Detected network CIDR: %s", networkCIDR))
 	}
 
 	return ipInfo, nil
@@ -133,6 +146,85 @@ func detectExternalIP() (string, error) {
 	}
 
 	return "", fmt.Errorf("could not detect external IP address")
+}
+
+// getPrimaryInterface finds the primary network interface
+// It first looks for the interface with the default route
+// If that fails, it finds the first non-loopback interface
+func getPrimaryInterface() (*net.Interface, error) {
+	// Get all network interfaces
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network interfaces: %w", err)
+	}
+
+	// First try: find interface with default route
+	// The approach is to find interfaces that have gateway routes
+	for _, iface := range interfaces {
+		// Skip interfaces that are down
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		// Skip loopback interfaces
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		// Get interface addresses
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		// Check if this interface has IPv4 addresses
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
+				// This is a likely candidate for the primary interface
+				return &iface, nil
+			}
+		}
+	}
+
+	// Second try: just get the first non-loopback interface with an IPv4 address
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagLoopback == 0 {
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+
+			for _, addr := range addrs {
+				if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.To4() != nil {
+					return &iface, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no suitable network interface found")
+}
+
+// detectNetworkCIDR gets the network CIDR for the primary interface
+func detectNetworkCIDR() (string, error) {
+	iface, err := getPrimaryInterface()
+	if err != nil {
+		return "", fmt.Errorf("failed to get primary network interface: %w", err)
+	}
+
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return "", fmt.Errorf("failed to get addresses for interface %s: %w", iface.Name, err)
+	}
+
+	// Find the first IPv4 address
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.To4() != nil {
+			return ipnet.String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("no IPv4 address found for interface %s", iface.Name)
 }
 
 // ValidateIP checks if a provided IP address is valid

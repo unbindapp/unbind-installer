@@ -72,6 +72,7 @@ func (self Model) startDetectingIPs() tea.Cmd {
 
 		if err != nil {
 			self.logChan <- "Error detecting IPs: " + err.Error()
+			return errMsg{err: errdefs.ErrNetworkDetectionFailed}
 		}
 
 		return detectIPsCompleteMsg{ipInfo: ipInfo}
@@ -153,11 +154,20 @@ func (self Model) installK3S() tea.Cmd {
 		installer := k3s.NewInstaller(self.logChan)
 
 		// Install K3S
-		err := installer.Install()
+		kubeConfig, err := installer.Install()
 		if err != nil {
 			self.logChan <- fmt.Sprintf("K3S installation failed: %s", err.Error())
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}
 		}
+
+		// Create a new K8s client
+		client, err := k3s.NewK8sClient(kubeConfig)
+		if err != nil {
+			self.logChan <- fmt.Sprintf("K8s client creation failed: %s", err.Error())
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K8s client creation failed: %s", err.Error()))}
+		}
+		self.kubeConfig = kubeConfig
+		self.kubeClient = client
 
 		return k3sInstallCompleteMsg{}
 	}
@@ -167,7 +177,7 @@ func (self Model) installK3S() tea.Cmd {
 func (self Model) installCilium() tea.Cmd {
 	return func() tea.Msg {
 		// Create a new K3S installer
-		installer := k3s.NewCiliumInstaller(self.logChan)
+		installer := k3s.NewCiliumInstaller(self.logChan, self.kubeConfig, self.kubeClient, self.dnsInfo.InternalIP, self.dnsInfo.CIDR)
 
 		// Install K3S
 		err := installer.Install()

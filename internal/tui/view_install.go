@@ -150,6 +150,12 @@ func (m Model) updateInstallCompleteState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.listenForLogs(),
 		)
 
+	case errMsg:
+		m.err = msg.err
+		m.state = StateError
+		m.isLoading = false
+		return m, m.listenForLogs()
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height

@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
+	"k8s.io/client-go/dynamic"
 )
 
 // Model represents the application state
@@ -32,7 +33,9 @@ type Model struct {
 	dnsInfo     *dnsInfo
 	domainInput textinput.Model
 
-	// You can add more feature-specific fields here as you add more stages
+	// Kube client
+	kubeConfig string
+	kubeClient *dynamic.DynamicClient
 }
 
 // NewModel initializes a new Model

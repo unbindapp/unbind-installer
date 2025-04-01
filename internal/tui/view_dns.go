@@ -68,6 +68,12 @@ func (m Model) updateDetectingIPsState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, tea.Batch(cmd, m.listenForLogs())
 
+	case errMsg:
+		m.err = msg.err
+		m.state = StateError
+		m.isLoading = false
+		return m, m.listenForLogs()
+
 	case detectIPsCompleteMsg:
 		m.state = StateDNSConfig
 		m.isLoading = false
@@ -81,6 +87,7 @@ func (m Model) updateDetectingIPsState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.ipInfo != nil {
 			m.dnsInfo.InternalIP = msg.ipInfo.InternalIP
 			m.dnsInfo.ExternalIP = msg.ipInfo.ExternalIP
+			m.dnsInfo.CIDR = msg.ipInfo.CIDR
 		}
 
 		// Focus the domain input field

@@ -22,7 +22,8 @@ func NewInstaller(logChan chan<- string) *Installer {
 }
 
 // Install installs K3S with the specified flags
-func (self *Installer) Install() error {
+// Returns kube config path if successful, or an error if it fails
+func (self *Installer) Install() (string, error) {
 	// Keep the incorrect flag format for testing error handling
 	k3sInstallFlags := "--flannel-backend=none --disable-kube-proxy --disable=servicelb --disable-network-policy --disable=traefik"
 
@@ -35,7 +36,7 @@ func (self *Installer) Install() error {
 	downloadOutput, err := downloadCmd.CombinedOutput()
 	if err != nil {
 		self.log(fmt.Sprintf("Error downloading K3S installer: %s", string(downloadOutput)))
-		return fmt.Errorf("failed to download K3S installer: %w", err)
+		return "", fmt.Errorf("failed to download K3S installer: %w", err)
 	}
 
 	// Make the installer executable
@@ -44,7 +45,7 @@ func (self *Installer) Install() error {
 	chmodOutput, err := chmodCmd.CombinedOutput()
 	if err != nil {
 		self.log(fmt.Sprintf("Error setting permissions: %s", string(chmodOutput)))
-		return fmt.Errorf("failed to set installer permissions: %w", err)
+		return "", fmt.Errorf("failed to set installer permissions: %w", err)
 	}
 
 	// Run the K3S installer
@@ -64,7 +65,7 @@ func (self *Installer) Install() error {
 
 		// Only return an error if collectServiceDiagnostics found an actual error
 		if serviceError != nil {
-			return fmt.Errorf("K3S service failed to start after installation: %w", serviceError)
+			return "", fmt.Errorf("K3S service failed to start after installation: %w", serviceError)
 		}
 	}
 
@@ -78,7 +79,7 @@ func (self *Installer) Install() error {
 
 		// Only return an error if collectServiceDiagnostics found an actual error
 		if serviceError != nil {
-			return fmt.Errorf("K3S service failed to start after installation: %w", serviceError)
+			return "", fmt.Errorf("K3S service failed to start after installation: %w", serviceError)
 		}
 	}
 
@@ -93,34 +94,6 @@ func (self *Installer) checkServiceStatus() (string, error) {
 	statusStr := strings.TrimSpace(string(statusOutput))
 
 	return statusStr, err
-}
-
-// checkJournalForErrors looks for critical error messages in the K3S service journal
-// This version is more selective about what constitutes a real error
-func (self *Installer) checkJournalForErrors() (bool, error) {
-	// Focus on recent fatal-level messages that would indicate a non-working service
-	journalCmd := exec.Command("journalctl", "-n", "50", "-u", "k3s.service",
-		"-p", "3", "--grep=level=fatal")
-	journalOutput, _ := journalCmd.CombinedOutput()
-	journalOutputStr := strings.TrimSpace(string(journalOutput))
-
-	// If we find fatal errors, we need to check if they're recent
-	if len(journalOutputStr) > 0 {
-		// Get the systemd service state - if it's active, recent errors might not be fatal
-		statusCmd := exec.Command("systemctl", "is-active", "k3s.service")
-		statusOutput, _ := statusCmd.CombinedOutput()
-		statusStr := strings.TrimSpace(string(statusOutput))
-
-		// Even if we found error messages, if the service is active, don't report an error
-		if statusStr == "active" {
-			self.log("Found error messages in journal, but service is active, so ignoring them")
-			return false, nil
-		}
-
-		return true, nil
-	}
-
-	return false, nil
 }
 
 // collectServiceDiagnostics collects detailed diagnostics about the K3S service
@@ -165,7 +138,7 @@ func (self *Installer) collectServiceDiagnostics() error {
 }
 
 // waitForK3SAndVerify waits for K3S to start and verifies the installation
-func (self *Installer) waitForK3SAndVerify() error {
+func (self *Installer) waitForK3SAndVerify() (string, error) {
 	// Wait longer for the service to be fully up
 	self.log("Waiting for K3S service to start (this may take up to 30 seconds)...")
 
@@ -189,7 +162,7 @@ func (self *Installer) waitForK3SAndVerify() error {
 			// Collect detailed diagnostics
 			serviceError := self.collectServiceDiagnostics()
 
-			return fmt.Errorf("K3S service failed to become active after installation: %w", serviceError)
+			return "", fmt.Errorf("K3S service failed to become active after installation: %w", serviceError)
 		}
 	}
 
@@ -213,13 +186,9 @@ func (self *Installer) waitForK3SAndVerify() error {
 			// Collect detailed diagnostics
 			serviceError := self.collectServiceDiagnostics()
 
-			return fmt.Errorf("K3S installed but kubeconfig not created: %w", serviceError)
+			return "", fmt.Errorf("K3S installed but kubeconfig not created: %w", serviceError)
 		}
 	}
-
-	// Set KUBECONFIG environment variable
-	self.log("Setting KUBECONFIG environment variable...")
-	os.Setenv("KUBECONFIG", kubeconfigPath)
 
 	// Verify k3s is working by checking nodes
 	self.log("Verifying K3S installation by checking nodes...")
@@ -236,7 +205,7 @@ func (self *Installer) waitForK3SAndVerify() error {
 		if err == nil {
 			self.log(fmt.Sprintf("K3S nodes: %s", string(kubeOutput)))
 			self.log("K3S installation verified successfully")
-			return nil
+			return kubeconfigPath, nil
 		}
 
 		if retry == maxNodeRetries-1 {
@@ -245,11 +214,11 @@ func (self *Installer) waitForK3SAndVerify() error {
 			// Collect detailed diagnostics
 			serviceError := self.collectServiceDiagnostics()
 
-			return fmt.Errorf("K3S installed but not functioning correctly: %w", serviceError)
+			return "", fmt.Errorf("K3S installed but not functioning correctly: %w", serviceError)
 		}
 	}
 
-	return nil
+	return kubeconfigPath, nil
 }
 
 // log sends a message to the log channel if available

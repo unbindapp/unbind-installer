@@ -10,8 +10,10 @@ type ErrorType int
 // Errors
 var (
 	ErrNotRoot                     = errors.New("This installer must be run with root privileges")
+	ErrNetworkDetectionFailed      = errors.New("Network detection failed")
 	ErrK3sInstallFailed            = NewCustomError(ErrTypeK3sInstallFailed, "")
 	ErrNotLinux                    = NewCustomError(ErrTypeNotLinux, "")
+	ErrInvalidArchitecture         = NewCustomError(ErrTypeInvalidArchitecture, "")
 	ErrDistributionDetectionFailed = NewCustomError(ErrTypeDistributionDetectionFailed, "")
 	ErrUnsupportedDistribution     = NewCustomError(ErrTypeUnsupportedDistribution, "")
 	ErrUnsupportedVersion          = NewCustomError(ErrTypeUnsupportedVersion, "")
@@ -20,6 +22,7 @@ var (
 // More dynamic errors
 const (
 	ErrTypeNotLinux ErrorType = iota
+	ErrTypeInvalidArchitecture
 	ErrTypeDistributionDetectionFailed
 	ErrTypeUnsupportedDistribution
 	ErrTypeUnsupportedVersion
@@ -28,6 +31,7 @@ const (
 
 var errorTypeStrings = map[ErrorType]string{
 	ErrTypeNotLinux:                    "ErrNotLinux",
+	ErrTypeInvalidArchitecture:         "ErrInvalidArchitecture",
 	ErrTypeDistributionDetectionFailed: "ErrDistributionDetectionFailed",
 	ErrTypeUnsupportedDistribution:     "ErrUnsupportedDistribution",
 	ErrTypeUnsupportedVersion:          "ErrUnsupportedVersion",

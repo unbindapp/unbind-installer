@@ -48,6 +48,10 @@ func GetOSInfo() (*OSInfo, error) {
 		return nil, errdefs.NewCustomError(errdefs.ErrTypeNotLinux, fmt.Sprintf("Only linux is supported, but I found %s", runtime.GOOS))
 	}
 
+	if getGoarch() != "amd64" && getGoarch() != "arm64" {
+		return nil, errdefs.NewCustomError(errdefs.ErrTypeInvalidArchitecture, fmt.Sprintf("Only amd64 and arm64 are supported, but I found %s", runtime.GOARCH))
+	}
+
 	// Start with basic OS info from Go runtime
 	info := &OSInfo{
 		Architecture: getArchFunc(),

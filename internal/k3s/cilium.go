@@ -2,59 +2,63 @@ package k3s
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
+	"runtime"
 	"strings"
+
+	"github.com/unbindapp/unbind-installer/internal/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 // CiliumInstaller handles installation of Cilium CNI
 type CiliumInstaller struct {
 	// Channel to send log messages
 	LogChan chan<- string
-	// Path to the kubeconfig file
+	// Kubeconfig path
 	KubeconfigPath string
+	// K8s client
+	K8sClient *dynamic.DynamicClient
+	// CIDR for the load balancer pool
+	CIDR string
+	// InternalIP for the Kubernetes API server
+	InternalIP string
 }
 
 // NewCiliumInstaller creates a new Cilium Installer
-func NewCiliumInstaller(logChan chan<- string) *CiliumInstaller {
+func NewCiliumInstaller(logChan chan<- string, kubeConfig string, client *dynamic.DynamicClient, internalIP, cidr string) *CiliumInstaller {
 	return &CiliumInstaller{
 		LogChan:        logChan,
-		KubeconfigPath: "/etc/rancher/k3s/k3s.yaml",
+		KubeconfigPath: kubeConfig,
+		K8sClient:      client,
+		InternalIP:     internalIP,
+		CIDR:           cidr,
 	}
 }
 
-// SetKubeconfig sets a custom path for the kubeconfig file
-func (c *CiliumInstaller) SetKubeconfig(path string) {
-	c.KubeconfigPath = path
+// log sends a message to the log channel if available
+func (c *CiliumInstaller) log(message string) {
+	if c.LogChan != nil {
+		c.LogChan <- message
+	}
 }
 
 // Install installs and configures Cilium
 func (c *CiliumInstaller) Install() error {
-	// Ensure kubeconfig exists
-	if _, err := os.Stat(c.KubeconfigPath); os.IsNotExist(err) {
-		c.log("Kubeconfig file does not exist at: " + c.KubeconfigPath)
-		return fmt.Errorf("kubeconfig file not found: %w", err)
-	}
-
-	// Set KUBECONFIG environment variable
-	os.Setenv("KUBECONFIG", c.KubeconfigPath)
-
-	// Get the internal IP to use for k8sServiceHost
-	internalIP, err := c.getInternalIP()
-	if err != nil {
-		return fmt.Errorf("failed to get internal IP: %w", err)
-	}
-	c.log(fmt.Sprintf("Using internal IP: %s", internalIP))
-
 	// Install Cilium CLI
 	if err := c.installCiliumCLI(); err != nil {
 		return fmt.Errorf("failed to install Cilium CLI: %w", err)
 	}
 
 	// Install Cilium
-	if err := c.installCilium(internalIP); err != nil {
+	if err := c.installCilium(); err != nil {
 		return fmt.Errorf("failed to install Cilium: %w", err)
 	}
 
@@ -73,59 +77,47 @@ func (c *CiliumInstaller) installCiliumCLI() error {
 
 	// Get the latest stable version
 	c.log("Determining latest Cilium CLI version...")
-	versionCmd := exec.Command("curl", "-s", "https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt")
-	versionOutput, err := versionCmd.CombinedOutput()
+	resp, err := http.Get("https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt")
 	if err != nil {
-		c.log(fmt.Sprintf("Error getting Cilium CLI version: %s", string(versionOutput)))
 		return fmt.Errorf("failed to get Cilium CLI version: %w", err)
 	}
-	ciliumCliVersion := strings.TrimSpace(string(versionOutput))
-	c.log(fmt.Sprintf("Found Cilium CLI version: %s", ciliumCliVersion))
+	defer resp.Body.Close()
 
-	// Determine architecture
-	archCmd := exec.Command("uname", "-m")
-	archOutput, err := archCmd.CombinedOutput()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to get Cilium CLI version, status code: %d", resp.StatusCode)
+	}
+
+	versionBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		c.log(fmt.Sprintf("Error determining architecture: %s", string(archOutput)))
-		return fmt.Errorf("failed to determine architecture: %w", err)
+		return fmt.Errorf("failed to read Cilium CLI version: %w", err)
 	}
 
-	cliArch := "amd64"
-	if strings.TrimSpace(string(archOutput)) == "aarch64" {
-		cliArch = "arm64"
-	}
-	c.log(fmt.Sprintf("Using architecture: %s", cliArch))
+	ciliumCliVersion := strings.TrimSpace(string(versionBytes))
+	c.log(fmt.Sprintf("Found Cilium CLI version: %s", ciliumCliVersion))
 
 	// Download Cilium CLI
 	c.log("Downloading Cilium CLI...")
-	downloadURL := fmt.Sprintf("https://github.com/cilium/cilium-cli/releases/download/%s/cilium-linux-%s.tar.gz", ciliumCliVersion, cliArch)
+	downloadURL := fmt.Sprintf("https://github.com/cilium/cilium-cli/releases/download/%s/cilium-linux-%s.tar.gz", ciliumCliVersion, runtime.GOARCH)
 	shaURL := downloadURL + ".sha256sum"
 
 	// Download the tarball
-	tarballPath := fmt.Sprintf("/tmp/cilium-linux-%s.tar.gz", cliArch)
-	downloadCmd := exec.Command("curl", "-L", "--fail", "-o", tarballPath, downloadURL)
-	downloadOutput, err := downloadCmd.CombinedOutput()
+	tarballPath := fmt.Sprintf("/tmp/cilium-linux-%s.tar.gz", runtime.GOARCH)
+	err = utils.DownloadFile(tarballPath, downloadURL)
 	if err != nil {
-		c.log(fmt.Sprintf("Error downloading Cilium CLI: %s", string(downloadOutput)))
 		return fmt.Errorf("failed to download Cilium CLI: %w", err)
 	}
 
 	// Download the SHA256 checksum
 	shaPath := tarballPath + ".sha256sum"
-	shaCmd := exec.Command("curl", "-L", "--fail", "-o", shaPath, shaURL)
-	shaOutput, err := shaCmd.CombinedOutput()
+	err = utils.DownloadFile(shaPath, shaURL)
 	if err != nil {
-		c.log(fmt.Sprintf("Error downloading SHA checksum: %s", string(shaOutput)))
 		return fmt.Errorf("failed to download SHA checksum: %w", err)
 	}
 
-	// Verify the checksum
+	// Verify the checksum using native Go crypto functions
 	c.log("Verifying checksum...")
-	verifyCmd := exec.Command("sha256sum", "--check", shaPath)
-	verifyCmd.Dir = "/tmp" // Set working directory to where the files are
-	verifyOutput, err := verifyCmd.CombinedOutput()
+	err = utils.VerifyChecksum(tarballPath, shaPath)
 	if err != nil {
-		c.log(fmt.Sprintf("Error verifying checksum: %s", string(verifyOutput)))
 		return fmt.Errorf("checksum verification failed: %w", err)
 	}
 
@@ -157,13 +149,13 @@ func (c *CiliumInstaller) installCiliumCLI() error {
 }
 
 // installCilium installs Cilium with the required configuration
-func (c *CiliumInstaller) installCilium(internalIP string) error {
+func (c *CiliumInstaller) installCilium() error {
 	c.log("Installing Cilium...")
 
 	// Build the install command
 	installCmd := exec.Command(
 		"cilium", "install",
-		"--set", fmt.Sprintf("k8sServiceHost=%s", internalIP),
+		"--set", fmt.Sprintf("k8sServiceHost=%s", c.InternalIP),
 		"--set", "k8sServicePort=6443",
 		"--set", "kubeProxyReplacement=true",
 		"--set", "ipam.operator.clusterPoolIPv4PodCIDRList=10.42.0.0/16",
@@ -225,142 +217,55 @@ func (c *CiliumInstaller) installCilium(internalIP string) error {
 	return nil
 }
 
-// configureLBIPPool configures the Cilium LoadBalancer IP pool
+// configureLBIPPool configures the Cilium LoadBalancer IP pool using the DynamicClient
 func (c *CiliumInstaller) configureLBIPPool() error {
-	c.log("Configuring Cilium LoadBalancer IP pool...")
+	c.log(fmt.Sprintf("Configuring Cilium LoadBalancer IP pool for %s...", c.CIDR))
 
-	// Get network info
-	primaryInterface, err := c.getPrimaryInterface()
-	if err != nil {
-		return fmt.Errorf("failed to determine primary interface: %w", err)
-	}
-	c.log(fmt.Sprintf("Using primary interface: %s", primaryInterface))
-
-	// Get network CIDR for the primary interface
-	networkCIDR, err := c.getNetworkCIDR(primaryInterface)
-	if err != nil {
-		return fmt.Errorf("failed to determine network CIDR: %w", err)
-	}
-	c.log(fmt.Sprintf("Using network CIDR: %s", networkCIDR))
-
-	// Create Cilium LoadBalancer IP Pool configuration
-	c.log("Creating Cilium LoadBalancer IP Pool...")
-	ipPoolConfig := fmt.Sprintf(`apiVersion: "cilium.io/v2alpha1"
-kind: CiliumLoadBalancerIPPool
-metadata:
-  name: "external"
-spec:
-  blocks:
-  - cidr: "%s"
-`, networkCIDR)
-
-	// Write configuration to a temporary file
-	tempFile, err := os.CreateTemp("", "cilium-lb-pool-*.yaml")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
-	}
-	defer os.Remove(tempFile.Name())
-
-	if _, err := tempFile.Write([]byte(ipPoolConfig)); err != nil {
-		return fmt.Errorf("failed to write to temporary file: %w", err)
-	}
-	tempFile.Close()
-
-	// Apply the configuration
-	applyCmd := exec.Command("kubectl", "apply", "-f", tempFile.Name())
-	applyCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", c.KubeconfigPath))
-	applyOutput, err := applyCmd.CombinedOutput()
-	if err != nil {
-		c.log(fmt.Sprintf("Error configuring LoadBalancer IP pool: %s", string(applyOutput)))
-		return fmt.Errorf("failed to configure LoadBalancer IP pool: %w", err)
+	// Define the resource
+	poolResource := schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v2alpha1",
+		Resource: "ciliumloadbalanceripools",
 	}
 
-	c.log(fmt.Sprintf("LoadBalancer IP pool configured: %s", strings.TrimSpace(string(applyOutput))))
-	return nil
-}
-
-// getInternalIP gets the internal IP of the machine
-func (c *CiliumInstaller) getInternalIP() (string, error) {
-	// Try to get the default interface used for routing
-	primaryInterface, err := c.getPrimaryInterface()
-	if err != nil {
-		return "", fmt.Errorf("failed to determine primary interface: %w", err)
+	// Create the pool object
+	pool := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "cilium.io/v2alpha1",
+			"kind":       "CiliumLoadBalancerIPPool",
+			"metadata": map[string]interface{}{
+				"name": "external",
+			},
+			"spec": map[string]interface{}{
+				"blocks": []interface{}{
+					map[string]interface{}{
+						"cidr": c.CIDR,
+					},
+				},
+			},
+		},
 	}
 
-	// Get the IP for this interface
-	cmd := exec.Command("ip", "-o", "-4", "addr", "show", primaryInterface)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to get IP information for interface %s: %w", primaryInterface, err)
-	}
+	ctx := context.Background()
 
-	// Extract the IP address using a regular expression
-	re := regexp.MustCompile(`inet\s+(\d+\.\d+\.\d+\.\d+)`)
-	matches := re.FindStringSubmatch(string(output))
-	if len(matches) < 2 {
-		return "", fmt.Errorf("no IP address found for interface %s", primaryInterface)
-	}
-
-	return matches[1], nil
-}
-
-// getPrimaryInterface gets the name of the primary network interface
-func (c *CiliumInstaller) getPrimaryInterface() (string, error) {
-	// Try to get the default interface used for routing
-	routeCmd := exec.Command("ip", "route", "get", "1.1.1.1")
-	routeOutput, err := routeCmd.CombinedOutput()
+	// Check if the resource already exists
+	_, err := c.K8sClient.Resource(poolResource).Get(ctx, "external", metav1.GetOptions{})
 	if err == nil {
-		re := regexp.MustCompile(`dev\s+(\S+)`)
-		matches := re.FindStringSubmatch(string(routeOutput))
-		if len(matches) >= 2 {
-			return matches[1], nil
+		// Resource exists, update it
+		c.log("LoadBalancer IP pool already exists, updating...")
+		_, err = c.K8sClient.Resource(poolResource).Update(ctx, pool, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to update LoadBalancer IP pool: %w", err)
 		}
-	}
-
-	// Fallback: get the first non-loopback interface
-	ifaceCmd := exec.Command("ip", "-o", "-4", "addr", "show")
-	ifaceOutput, err := ifaceCmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to list network interfaces: %w", err)
-	}
-
-	// Extract interface names and find the first non-loopback
-	lines := strings.Split(string(ifaceOutput), "\n")
-	for _, line := range lines {
-		if !strings.Contains(line, "127.0.0.1") && strings.TrimSpace(line) != "" {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				// Extract interface name (remove trailing colon if present)
-				iface := strings.TrimSuffix(fields[1], ":")
-				return iface, nil
-			}
+		c.log("LoadBalancer IP pool updated successfully")
+	} else {
+		// Resource doesn't exist, create it
+		_, err = c.K8sClient.Resource(poolResource).Create(ctx, pool, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create LoadBalancer IP pool: %w", err)
 		}
+		c.log("LoadBalancer IP pool created successfully")
 	}
 
-	return "", fmt.Errorf("no suitable network interface found")
-}
-
-// getNetworkCIDR gets the network CIDR for the given interface
-func (c *CiliumInstaller) getNetworkCIDR(iface string) (string, error) {
-	cmd := exec.Command("ip", "-o", "-4", "addr", "show", iface)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to get CIDR for interface %s: %w", iface, err)
-	}
-
-	// Extract the CIDR using a regular expression
-	re := regexp.MustCompile(`inet\s+(\d+\.\d+\.\d+\.\d+/\d+)`)
-	matches := re.FindStringSubmatch(string(output))
-	if len(matches) < 2 {
-		return "", fmt.Errorf("no CIDR found for interface %s", iface)
-	}
-
-	return matches[1], nil
-}
-
-// log sends a message to the log channel if available
-func (c *CiliumInstaller) log(message string) {
-	if c.LogChan != nil {
-		c.LogChan <- message
-	}
+	return nil
 }

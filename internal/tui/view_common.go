@@ -72,6 +72,10 @@ func viewError(m Model) string {
 
 	if errors.Is(m.err, errdefs.ErrNotLinux) {
 		s.WriteString(m.styles.Error.Render("Sorry, only Linux is supported for now!"))
+	} else if errors.Is(m.err, errdefs.ErrInvalidArchitecture) {
+		s.WriteString(m.styles.Error.Render("Sorry, this installer only supports amd64 and arm64 architectures!"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Subtle.Render("(this is a limitation of k3s)"))
 	} else if errors.Is(m.err, errdefs.ErrUnsupportedDistribution) {
 		s.WriteString(m.styles.Error.Render("Sorry, this distribution is not supported!"))
 		supportedDistros := strings.Join(osinfo.AllSupportedDistros, ", ")
@@ -93,9 +97,12 @@ func viewError(m Model) string {
 		s.WriteString(m.styles.Error.Render("Sorry, the K3s installation failed!"))
 		s.WriteString("\n")
 		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'd'."))
+	} else if errors.Is(m.err, errdefs.ErrNetworkDetectionFailed) {
+		s.WriteString(m.styles.Error.Render("Sorry, I couldn't detect your network interfaces!"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'd'."))
 	} else if m.err != nil {
 		s.WriteString(m.styles.Error.Render(fmt.Sprintf("An error occurred: %v", m.err)))
-
 	} else {
 		s.WriteString(m.styles.Error.Render(fmt.Sprintf("Unknown error: %v", m.err)))
 	}
