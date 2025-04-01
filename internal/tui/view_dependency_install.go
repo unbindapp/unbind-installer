@@ -157,16 +157,17 @@ func viewInstallingDependencies(m Model) string {
 
 		// Display installation steps (history)
 		if len(dep.StepHistory) > 0 {
+			s.WriteString("\n\n")
 			s.WriteString(m.styles.Bold.Render("Installation steps:"))
 			s.WriteString("\n")
 
 			// Show last 3 steps
 			startIdx := 0
-			if len(m.ciliumProgress.StepHistory) > 3 {
-				startIdx = len(m.ciliumProgress.StepHistory) - 3
+			if len(dep.StepHistory) > 3 {
+				startIdx = len(dep.StepHistory) - 3
 			}
 
-			for i, step := range m.ciliumProgress.StepHistory[startIdx:] {
+			for i, step := range dep.StepHistory[startIdx:] {
 				s.WriteString(fmt.Sprintf("  %d. %s\n", startIdx+i+1, m.styles.Subtle.Render(step)))
 			}
 			s.WriteString("\n")
