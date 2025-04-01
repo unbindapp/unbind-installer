@@ -163,6 +163,7 @@ func (c *CiliumInstaller) installCilium() error {
 	)
 
 	// Set KUBECONFIG environment variable
+	c.log(fmt.Sprintf("Using KUBECONFIG: %s", c.KubeconfigPath))
 	installCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", c.KubeconfigPath))
 
 	// Run the install command
