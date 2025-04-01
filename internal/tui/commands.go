@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -17,10 +18,21 @@ import (
 )
 
 // listenForLogs returns a command that listens for log messages
+type tickMsg struct{}
+
 func (self Model) listenForLogs() tea.Cmd {
 	return func() tea.Msg {
-		msg := <-self.logChan
-		return logMsg{msg}
+		select {
+		case msg, ok := <-self.logChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+			return logMsg{message: msg}
+		default:
+			// Don't block if no message is available
+			return tickMsg{} // A dummy message to keep the command running
+		}
 	}
 }
 
@@ -201,22 +213,58 @@ func (self Model) installCilium() tea.Cmd {
 	}
 }
 
-// installDependencies is a command that installs dependencies
+// Improved installDependencies function with better logging and error handling
 func (self Model) installDependencies() tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
+		// Add a debug log to confirm we've entered this function
+		self.logChan <- "Starting dependencies installation..."
 
+		// Create a context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		// Make sure dependencies manager exists
+		if self.dependenciesManager == nil {
+			errDescription := "Dependencies manager is nil, cannot install dependencies"
+			self.logChan <- errDescription
+			return errMsg{err: errors.New(errDescription)}
+		}
+
+		// Log the dependencies we're going to install
+		self.logChan <- fmt.Sprintf("Found %d dependencies to install", len(self.dependencies))
+
+		// Install each dependency
 		for _, dep := range self.dependencies {
+			self.logChan <- fmt.Sprintf("Starting installation of %s...", dep.Name)
+
 			switch dep.Name {
 			case "longhorn":
+				// For debugging, update progress directly
+				self.progressChan <- dependencies.DependencyUpdateMsg{
+					Name:     "longhorn",
+					Status:   dependencies.StatusInstalling,
+					Progress: 0.1,
+				}
+
+				// Log what we're about to do
+				self.logChan <- "Calling InstallLonghornWithSteps..."
+
+				// Install longhorn
 				err := self.dependenciesManager.InstallLonghornWithSteps(ctx)
 				if err != nil {
-					self.logChan <- fmt.Sprintf("Dependency installation failed: %s", err.Error())
-					return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeDependencyInstallFailed, fmt.Sprintf("Dependency installation failed: %s", err.Error()))}
+					errMessage := fmt.Sprintf("Failed to install %s: %v", dep.Name, err)
+					self.logChan <- errMessage
+					return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeDependencyInstallFailed, fmt.Sprintf("Failed to install %s: %v", dep.Name, err))}
 				}
+
+				self.logChan <- fmt.Sprintf("Successfully installed %s", dep.Name)
+
+			default:
+				self.logChan <- fmt.Sprintf("Unknown dependency: %s, skipping", dep.Name)
 			}
 		}
 
+		self.logChan <- "All dependencies installed successfully"
 		return dependencyInstallCompleteMsg{}
 	}
 }
