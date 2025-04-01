@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/unbindapp/unbind-installer/internal/network"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
+	"k8s.io/client-go/dynamic"
 )
 
 // Basic message types
@@ -43,6 +44,9 @@ type dnsValidationTimeoutMsg struct{}
 
 type manualContinueMsg struct{}
 
-type k3sInstallCompleteMsg struct{}
+type k3sInstallCompleteMsg struct {
+	kubeConfig string
+	kubeClient *dynamic.DynamicClient
+}
 
 type ciliumInstallCompleteMsg struct{}

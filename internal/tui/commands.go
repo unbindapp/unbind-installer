@@ -166,10 +166,11 @@ func (self Model) installK3S() tea.Cmd {
 			self.logChan <- fmt.Sprintf("K8s client creation failed: %s", err.Error())
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K8s client creation failed: %s", err.Error()))}
 		}
-		self.kubeConfig = kubeConfig
-		self.kubeClient = client
 
-		return k3sInstallCompleteMsg{}
+		return k3sInstallCompleteMsg{
+			kubeConfig: kubeConfig,
+			kubeClient: client,
+		}
 	}
 }
 

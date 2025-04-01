@@ -84,6 +84,8 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Install Cilium after K3S
 		m.state = StateInstallingCilium
 		m.isLoading = true
+		m.kubeClient = msg.kubeClient
+		m.kubeConfig = msg.kubeConfig
 
 		return m, tea.Batch(
 			m.spinner.Tick,

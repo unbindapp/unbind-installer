@@ -44,39 +44,39 @@ func NewCiliumInstaller(logChan chan<- string, kubeConfig string, client *dynami
 }
 
 // log sends a message to the log channel if available
-func (c *CiliumInstaller) log(message string) {
-	if c.LogChan != nil {
-		c.LogChan <- message
+func (self *CiliumInstaller) log(message string) {
+	if self.LogChan != nil {
+		self.LogChan <- message
 	}
 }
 
 // Install installs and configures Cilium
-func (c *CiliumInstaller) Install() error {
+func (self *CiliumInstaller) Install() error {
 	// Install Cilium CLI
-	if err := c.installCiliumCLI(); err != nil {
+	if err := self.installCiliumCLI(); err != nil {
 		return fmt.Errorf("failed to install Cilium CLI: %w", err)
 	}
 
 	// Install Cilium
-	if err := c.installCilium(); err != nil {
+	if err := self.installCilium(); err != nil {
 		return fmt.Errorf("failed to install Cilium: %w", err)
 	}
 
 	// Configure Cilium LoadBalancer IP pool
-	if err := c.configureLBIPPool(); err != nil {
+	if err := self.configureLBIPPool(); err != nil {
 		return fmt.Errorf("failed to configure Cilium LoadBalancer IP pool: %w", err)
 	}
 
-	c.log("Cilium installation and configuration completed successfully")
+	self.log("Cilium installation and configuration completed successfully")
 	return nil
 }
 
 // installCiliumCLI installs the Cilium CLI tool
-func (c *CiliumInstaller) installCiliumCLI() error {
-	c.log("Installing Cilium CLI...")
+func (self *CiliumInstaller) installCiliumCLI() error {
+	self.log("Installing Cilium CLI...")
 
 	// Get the latest stable version
-	c.log("Determining latest Cilium CLI version...")
+	self.log("Determining latest Cilium CLI version...")
 	resp, err := http.Get("https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt")
 	if err != nil {
 		return fmt.Errorf("failed to get Cilium CLI version: %w", err)
@@ -93,10 +93,10 @@ func (c *CiliumInstaller) installCiliumCLI() error {
 	}
 
 	ciliumCliVersion := strings.TrimSpace(string(versionBytes))
-	c.log(fmt.Sprintf("Found Cilium CLI version: %s", ciliumCliVersion))
+	self.log(fmt.Sprintf("Found Cilium CLI version: %s", ciliumCliVersion))
 
 	// Download Cilium CLI
-	c.log("Downloading Cilium CLI...")
+	self.log("Downloading Cilium CLI...")
 	downloadURL := fmt.Sprintf("https://github.com/cilium/cilium-cli/releases/download/%s/cilium-linux-%s.tar.gz", ciliumCliVersion, runtime.GOARCH)
 	shaURL := downloadURL + ".sha256sum"
 
@@ -115,47 +115,47 @@ func (c *CiliumInstaller) installCiliumCLI() error {
 	}
 
 	// Verify the checksum using native Go crypto functions
-	c.log("Verifying checksum...")
+	self.log("Verifying checksum...")
 	err = utils.VerifyChecksum(tarballPath, shaPath)
 	if err != nil {
 		return fmt.Errorf("checksum verification failed: %w", err)
 	}
 
 	// Extract the CLI
-	c.log("Extracting Cilium CLI...")
+	self.log("Extracting Cilium CLI...")
 	extractCmd := exec.Command("tar", "xzvfC", tarballPath, "/usr/local/bin")
 	extractOutput, err := extractCmd.CombinedOutput()
 	if err != nil {
-		c.log(fmt.Sprintf("Error extracting Cilium CLI: %s", string(extractOutput)))
+		self.log(fmt.Sprintf("Error extracting Cilium CLI: %s", string(extractOutput)))
 		return fmt.Errorf("failed to extract Cilium CLI: %w", err)
 	}
 
 	// Clean up downloaded files
-	c.log("Cleaning up downloaded files...")
+	self.log("Cleaning up downloaded files...")
 	os.Remove(tarballPath)
 	os.Remove(shaPath)
 
 	// Verify Cilium CLI works
-	c.log("Verifying Cilium CLI installation...")
+	self.log("Verifying Cilium CLI installation...")
 	versionCheckCmd := exec.Command("cilium", "version")
 	versionCheckOutput, err := versionCheckCmd.CombinedOutput()
 	if err != nil {
-		c.log(fmt.Sprintf("Error verifying Cilium CLI: %s", string(versionCheckOutput)))
+		self.log(fmt.Sprintf("Error verifying Cilium CLI: %s", string(versionCheckOutput)))
 		return fmt.Errorf("Cilium CLI verification failed: %w", err)
 	}
-	c.log(fmt.Sprintf("Cilium CLI installed successfully: %s", strings.TrimSpace(string(versionCheckOutput))))
+	self.log(fmt.Sprintf("Cilium CLI installed successfully: %s", strings.TrimSpace(string(versionCheckOutput))))
 
 	return nil
 }
 
 // installCilium installs Cilium with the required configuration
-func (c *CiliumInstaller) installCilium() error {
-	c.log("Installing Cilium...")
+func (self *CiliumInstaller) installCilium() error {
+	self.log("Installing Cilium...")
 
 	// Build the install command
 	installCmd := exec.Command(
 		"cilium", "install",
-		"--set", fmt.Sprintf("k8sServiceHost=%s", c.InternalIP),
+		"--set", fmt.Sprintf("k8sServiceHost=%s", self.InternalIP),
 		"--set", "k8sServicePort=6443",
 		"--set", "kubeProxyReplacement=true",
 		"--set", "ipam.operator.clusterPoolIPv4PodCIDRList=10.42.0.0/16",
@@ -163,8 +163,8 @@ func (c *CiliumInstaller) installCilium() error {
 	)
 
 	// Set KUBECONFIG environment variable
-	c.log(fmt.Sprintf("Using KUBECONFIG: %s", c.KubeconfigPath))
-	installCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", c.KubeconfigPath))
+	self.log(fmt.Sprintf("Using KUBECONFIG: %s", self.KubeconfigPath))
+	installCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.KubeconfigPath))
 
 	// Run the install command
 	var outBuffer bytes.Buffer
@@ -172,17 +172,17 @@ func (c *CiliumInstaller) installCilium() error {
 	installCmd.Stdout = &outBuffer
 	installCmd.Stderr = &errBuffer
 
-	c.log(fmt.Sprintf("Running command: %s", installCmd.String()))
+	self.log(fmt.Sprintf("Running command: %s", installCmd.String()))
 	err := installCmd.Run()
 	stdout := outBuffer.String()
 	stderr := errBuffer.String()
 
 	// Log output regardless of success or failure
 	if stdout != "" {
-		c.log(fmt.Sprintf("Cilium install stdout: %s", stdout))
+		self.log(fmt.Sprintf("Cilium install stdout: %s", stdout))
 	}
 	if stderr != "" {
-		c.log(fmt.Sprintf("Cilium install stderr: %s", stderr))
+		self.log(fmt.Sprintf("Cilium install stderr: %s", stderr))
 	}
 
 	if err != nil {
@@ -190,9 +190,9 @@ func (c *CiliumInstaller) installCilium() error {
 	}
 
 	// Wait for Cilium to be ready
-	c.log("Waiting for Cilium to be ready...")
+	self.log("Waiting for Cilium to be ready...")
 	statusCmd := exec.Command("cilium", "status", "--wait")
-	statusCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", c.KubeconfigPath))
+	statusCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.KubeconfigPath))
 
 	var statusOutBuffer bytes.Buffer
 	var statusErrBuffer bytes.Buffer
@@ -204,23 +204,23 @@ func (c *CiliumInstaller) installCilium() error {
 	statusStderr := statusErrBuffer.String()
 
 	if statusStdout != "" {
-		c.log(fmt.Sprintf("Cilium status stdout: %s", statusStdout))
+		self.log(fmt.Sprintf("Cilium status stdout: %s", statusStdout))
 	}
 	if statusStderr != "" {
-		c.log(fmt.Sprintf("Cilium status stderr: %s", statusStderr))
+		self.log(fmt.Sprintf("Cilium status stderr: %s", statusStderr))
 	}
 
 	if statusErr != nil {
 		return fmt.Errorf("cilium status check failed: %w", statusErr)
 	}
 
-	c.log("Cilium installed successfully")
+	self.log("Cilium installed successfully")
 	return nil
 }
 
 // configureLBIPPool configures the Cilium LoadBalancer IP pool using the DynamicClient
-func (c *CiliumInstaller) configureLBIPPool() error {
-	c.log(fmt.Sprintf("Configuring Cilium LoadBalancer IP pool for %s...", c.CIDR))
+func (self *CiliumInstaller) configureLBIPPool() error {
+	self.log(fmt.Sprintf("Configuring Cilium LoadBalancer IP pool for %s...", self.CIDR))
 
 	// Define the resource
 	poolResource := schema.GroupVersionResource{
@@ -240,7 +240,7 @@ func (c *CiliumInstaller) configureLBIPPool() error {
 			"spec": map[string]interface{}{
 				"blocks": []interface{}{
 					map[string]interface{}{
-						"cidr": c.CIDR,
+						"cidr": self.CIDR,
 					},
 				},
 			},
@@ -250,22 +250,22 @@ func (c *CiliumInstaller) configureLBIPPool() error {
 	ctx := context.Background()
 
 	// Check if the resource already exists
-	_, err := c.K8sClient.Resource(poolResource).Get(ctx, "external", metav1.GetOptions{})
+	_, err := self.K8sClient.Resource(poolResource).Get(ctx, "external", metav1.GetOptions{})
 	if err == nil {
 		// Resource exists, update it
-		c.log("LoadBalancer IP pool already exists, updating...")
-		_, err = c.K8sClient.Resource(poolResource).Update(ctx, pool, metav1.UpdateOptions{})
+		self.log("LoadBalancer IP pool already exists, updating...")
+		_, err = self.K8sClient.Resource(poolResource).Update(ctx, pool, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to update LoadBalancer IP pool: %w", err)
 		}
-		c.log("LoadBalancer IP pool updated successfully")
+		self.log("LoadBalancer IP pool updated successfully")
 	} else {
 		// Resource doesn't exist, create it
-		_, err = c.K8sClient.Resource(poolResource).Create(ctx, pool, metav1.CreateOptions{})
+		_, err = self.K8sClient.Resource(poolResource).Create(ctx, pool, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to create LoadBalancer IP pool: %w", err)
 		}
-		c.log("LoadBalancer IP pool created successfully")
+		self.log("LoadBalancer IP pool created successfully")
 	}
 
 	return nil
