@@ -90,8 +90,8 @@ func NewModel() Model {
 		domainInput: domainInput,
 		dependencies: []Dependency{
 			{
-				Name:        "longhorn",
-				Description: "Cloud native distributed storage",
+				Name:        "Unbind",
+				Description: "Self-hosting done right",
 				Status:      dependencies.StatusPending,
 				Progress:    0.0,
 			},

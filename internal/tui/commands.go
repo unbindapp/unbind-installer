@@ -246,9 +246,11 @@ func (self Model) installDependencies() tea.Cmd {
 			self.logChan <- fmt.Sprintf("Starting installation of %s...", dep.Name)
 
 			switch dep.Name {
-			case "longhorn":
-				// Install longhorn
-				err := self.dependenciesManager.InstallLonghornWithSteps(ctx)
+			case "unbind":
+				// Install unbind
+				err := self.dependenciesManager.SyncHelmfileWithSteps(ctx, dependencies.SyncHelmfileOptions{
+					BaseDomain: self.dnsInfo.Domain,
+				})
 				if err != nil {
 					errMessage := fmt.Sprintf("Failed to install %s: %v", dep.Name, err)
 					self.logChan <- errMessage

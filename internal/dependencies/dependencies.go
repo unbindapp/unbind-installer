@@ -17,6 +17,13 @@ type DependenciesManager struct {
 	helmEnv      *cli.EnvSettings
 }
 
+// InstallationStep defines a step in the installation process
+type InstallationStep struct {
+	Description string
+	Progress    float64
+	Action      func(context.Context) error
+}
+
 func NewDependenciesManager(kubeConfig string, logChan chan<- string, progressChan chan<- DependencyUpdateMsg) (*DependenciesManager, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
 	if err != nil {
