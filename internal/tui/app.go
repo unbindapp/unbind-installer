@@ -90,7 +90,7 @@ func NewModel() Model {
 		domainInput: domainInput,
 		dependencies: []Dependency{
 			{
-				Name:        "Unbind",
+				Name:        "unbind",
 				Description: "Self-hosting done right",
 				Status:      dependencies.StatusPending,
 				Progress:    0.0,
