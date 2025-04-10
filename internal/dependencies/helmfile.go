@@ -1,6 +1,7 @@
 package dependencies
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -35,12 +37,13 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 			Action: func(ctx context.Context) error {
 				// Check if helmfile is already installed
 				cmd := exec.CommandContext(ctx, "helmfile", "--version")
-				if err := cmd.Run(); err == nil {
-					self.sendLog("Helmfile is already installed")
+				out, err := cmd.CombinedOutput()
+				if err == nil {
+					self.sendLog(fmt.Sprintf("Helmfile is already installed: %s", strings.TrimSpace(string(out))))
 					return nil
 				}
 
-				self.sendLog("Helmfile not found, installing...")
+				self.logProgress("helmfile-sync", 0.05, "Helmfile not found, installing...")
 
 				// Create temp directory for download
 				tempDir, err := os.MkdirTemp("", "helmfile-*")
@@ -58,29 +61,44 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 				url := fmt.Sprintf("https://github.com/helmfile/helmfile/releases/download/v%s/helmfile_%s_%s_%s.tar.gz",
 					version, version, goos, goarch)
 
+				self.logProgress("helmfile-sync", 0.06, "Downloading Helmfile from %s", url)
+
 				// Download helmfile
 				tarPath := filepath.Join(tempDir, "helmfile.tar.gz")
-				if err := downloadFile(url, tarPath); err != nil {
+				if err := self.downloadFileWithProgress(url, tarPath); err != nil {
 					return fmt.Errorf("failed to download helmfile: %w", err)
 				}
 
+				self.logProgress("helmfile-sync", 0.07, "Extracting Helmfile")
+
 				// Extract the file
 				cmd = exec.CommandContext(ctx, "tar", "-xzf", tarPath, "-C", tempDir)
-				if err := cmd.Run(); err != nil {
-					return fmt.Errorf("failed to extract helmfile: %w", err)
+				if out, err := cmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to extract helmfile: %w, output: %s", err, string(out))
 				}
 
-				// Move to /usr/local/bin or ~/.local/bin
+				// Find an appropriate bin directory
 				binPath := "/usr/local/bin"
-				if _, err := os.Stat(binPath); os.IsNotExist(err) || !canWriteToDir(binPath) {
+				self.logProgress("helmfile-sync", 0.08, "Checking installation directory")
+
+				if !canWriteToDir(binPath) {
 					// Try user's local bin directory instead
 					home, err := os.UserHomeDir()
 					if err != nil {
 						return fmt.Errorf("failed to get home directory: %w", err)
 					}
 					binPath = filepath.Join(home, ".local", "bin")
-					os.MkdirAll(binPath, 0755)
+					if err := os.MkdirAll(binPath, 0755); err != nil {
+						return fmt.Errorf("failed to create bin directory: %w", err)
+					}
+
+					// Make sure the bin directory is in PATH
+					if !strings.Contains(os.Getenv("PATH"), binPath) {
+						self.sendLog(fmt.Sprintf("Note: Make sure to add %s to your PATH", binPath))
+					}
 				}
+
+				self.logProgress("helmfile-sync", 0.09, "Installing Helmfile to %s", binPath)
 
 				// Copy the binary
 				sourcePath := filepath.Join(tempDir, "helmfile")
@@ -95,13 +113,24 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 					return fmt.Errorf("failed to install helmfile: %w", err)
 				}
 
-				self.sendLog(fmt.Sprintf("Helmfile installed to %s", destPath))
+				// Verify installation
+				cmd = exec.CommandContext(ctx, destPath, "--version")
+				out, err = cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("helmfile installation verification failed: %w", err)
+				}
+
+				self.logProgress("helmfile-sync", 0.10, "Helmfile successfully installed: %s", strings.TrimSpace(string(out)))
+
+				// Set helmfile path for later use
+				os.Setenv("HELMFILE_PATH", destPath)
+
 				return nil
 			},
 		},
 		{
 			Description: "Creating temporary directory",
-			Progress:    0.1,
+			Progress:    0.15,
 			Action: func(ctx context.Context) error {
 				var err error
 				repoDir, err = os.MkdirTemp("", "unbind-charts-*")
@@ -113,39 +142,90 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 		},
 		{
 			Description: "Cloning repository",
-			Progress:    0.2,
+			Progress:    0.20,
 			Action: func(ctx context.Context) error {
+				self.logProgress("helmfile-sync", 0.21, "Cloning from %s", opts.RepoURL)
+
 				cmd := exec.CommandContext(ctx, "git", "clone", opts.RepoURL, repoDir)
-				output, err := cmd.CombinedOutput()
+
+				// Stream the output
+				stdoutPipe, err := cmd.StdoutPipe()
 				if err != nil {
-					return fmt.Errorf("failed to clone repository: %w, output: %s", err, string(output))
+					return fmt.Errorf("failed to create git stdout pipe: %w", err)
 				}
-				self.sendLog(fmt.Sprintf("Repository cloned successfully to %s", repoDir))
+
+				stderrPipe, err := cmd.StderrPipe()
+				if err != nil {
+					return fmt.Errorf("failed to create git stderr pipe: %w", err)
+				}
+
+				if err := cmd.Start(); err != nil {
+					return fmt.Errorf("failed to start git clone: %w", err)
+				}
+
+				// Stream stdout
+				go func() {
+					scanner := bufio.NewScanner(stdoutPipe)
+					for scanner.Scan() {
+						self.sendLog("git: " + scanner.Text())
+					}
+				}()
+
+				// Stream stderr
+				go func() {
+					scanner := bufio.NewScanner(stderrPipe)
+					for scanner.Scan() {
+						self.sendLog("git: " + scanner.Text())
+					}
+				}()
+
+				if err := cmd.Wait(); err != nil {
+					return fmt.Errorf("failed to clone repository: %w", err)
+				}
+
+				self.logProgress("helmfile-sync", 0.29, "Repository cloned successfully to %s", repoDir)
 				return nil
 			},
 		},
 		{
 			Description: "Running helmfile sync",
-			Progress:    0.3,
+			Progress:    0.30,
 			Action: func(ctx context.Context) error {
-				// Set up the command to run helmfile sync
-				cmd := exec.CommandContext(
-					ctx,
-					filepath.Join("/usr/local/bin", "helmfile"),
+				// Get helmfile path (if we installed it) or use "helmfile" command
+				helmfilePath := os.Getenv("HELMFILE_PATH")
+				if helmfilePath == "" {
+					helmfilePath = "helmfile"
+				}
+
+				// Construct arguments for helmfile command
+				args := []string{
 					"--file", filepath.Join(repoDir, "helmfile.yaml"),
-					"--state-values-set", "globals.baseDomain="+opts.BaseDomain,
-					"sync",
-				)
+					"--state-values-set", "globals.baseDomain=" + opts.BaseDomain,
+				}
+
+				// Add any additional values if present
+				for key, value := range opts.AdditionalValues {
+					args = append(args, "--state-values-set", fmt.Sprintf("%s=%v", key, value))
+				}
+
+				// Add final "sync" command
+				args = append(args, "sync")
+
+				self.logProgress("helmfile-sync", 0.31, "Starting helmfile sync with baseDomain=%s", opts.BaseDomain)
+
+				// Set up the command to run helmfile sync
+				cmd := exec.CommandContext(ctx, helmfilePath, args...)
 
 				// Set the current working directory
 				cmd.Dir = repoDir
 
-				// Create a pipe for stdout/stderr
-				stdout, err := cmd.StdoutPipe()
+				// Create pipes for stdout/stderr
+				stdoutPipe, err := cmd.StdoutPipe()
 				if err != nil {
 					return fmt.Errorf("failed to create stdout pipe: %w", err)
 				}
-				stderr, err := cmd.StderrPipe()
+
+				stderrPipe, err := cmd.StderrPipe()
 				if err != nil {
 					return fmt.Errorf("failed to create stderr pipe: %w", err)
 				}
@@ -155,33 +235,33 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 					return fmt.Errorf("failed to start helmfile sync: %w", err)
 				}
 
-				// Set up a go routine to stream logs
+				// Set up scanner for stdout
+				stdoutScanner := bufio.NewScanner(stdoutPipe)
+				stdoutScanner.Buffer(make([]byte, 4096), 1024*1024) // Increase buffer size
+
+				// Set up scanner for stderr
+				stderrScanner := bufio.NewScanner(stderrPipe)
+				stderrScanner.Buffer(make([]byte, 4096), 1024*1024) // Increase buffer size
+
+				// Run scanners in separate goroutines
 				go func() {
-					buffer := make([]byte, 4096)
-					for {
-						n, err := stdout.Read(buffer)
-						if n > 0 {
-							self.sendLog(string(buffer[:n]))
-							// Update progress based on the output
-							self.updateProgressBasedOnOutput(string(buffer[:n]))
-						}
-						if err != nil {
-							break
-						}
+					for stdoutScanner.Scan() {
+						line := stdoutScanner.Text()
+						self.sendLog(line)
+						self.updateProgressBasedOnOutput(line)
 					}
 				}()
 
-				// Set up a go routine to stream errors
 				go func() {
-					buffer := make([]byte, 4096)
-					for {
-						n, err := stderr.Read(buffer)
-						if n > 0 {
-							self.sendLog("ERROR: " + string(buffer[:n]))
+					for stderrScanner.Scan() {
+						line := stderrScanner.Text()
+						// Only log as error if it actually contains error-related words
+						if isErrorMessage(line) {
+							self.sendLog("ERROR: " + line)
+						} else {
+							self.sendLog(line)
 						}
-						if err != nil {
-							break
-						}
+						self.updateProgressBasedOnOutput(line)
 					}
 				}()
 
@@ -194,7 +274,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 					return fmt.Errorf("helmfile sync failed after %v: %w", syncDuration, err)
 				}
 
-				self.logProgress("helmfile-sync", 0.9,
+				self.logProgress("helmfile-sync", 0.90,
 					"Helmfile sync completed successfully in %v", syncDuration)
 				return nil
 			},
@@ -212,14 +292,26 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 						self.sendLog("Cleaned up temporary repository directory")
 					}
 				}
+
+				// Clear the environment variable we set
+				os.Unsetenv("HELMFILE_PATH")
+
 				return nil
 			},
 		},
 	})
 }
 
-// Helper function to download a file
-func downloadFile(url, filepath string) error {
+// Helper function to download a file with progress updates
+func (self *DependenciesManager) downloadFileWithProgress(url, filepath string) error {
+	// Create the file
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Get the data
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -230,14 +322,56 @@ func downloadFile(url, filepath string) error {
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
 
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
+	// Get file size for progress reporting
+	fileSize := resp.ContentLength
 
-	_, err = io.Copy(out, resp.Body)
+	// Create a progress tracker
+	counter := &writeCounter{
+		Total:         fileSize,
+		Manager:       self,
+		Dependency:    "helmfile-sync",
+		StartProgress: 0.06,
+		EndProgress:   0.07,
+	}
+
+	// Copy while counting progress
+	_, err = io.Copy(out, io.TeeReader(resp.Body, counter))
 	return err
+}
+
+// writeCounter counts bytes written and updates progress
+type writeCounter struct {
+	Total         int64
+	Downloaded    int64
+	Manager       *DependenciesManager
+	Dependency    string
+	LastProgress  float64
+	StartProgress float64
+	EndProgress   float64
+}
+
+func (wc *writeCounter) Write(p []byte) (int, error) {
+	n := len(p)
+	wc.Downloaded += int64(n)
+
+	// Calculate percentage
+	var percentage float64
+	if wc.Total > 0 {
+		percentage = float64(wc.Downloaded) / float64(wc.Total)
+	} else {
+		percentage = 0
+	}
+
+	// Scale the progress to our range
+	scaledProgress := wc.StartProgress + (percentage * (wc.EndProgress - wc.StartProgress))
+
+	// Only update every 10% to avoid flooding
+	if scaledProgress-wc.LastProgress >= 0.01 {
+		wc.Manager.updateProgress(wc.Dependency, "Downloading Helmfile", scaledProgress)
+		wc.LastProgress = scaledProgress
+	}
+
+	return n, nil
 }
 
 // Helper function to check if we can write to a directory
@@ -251,22 +385,49 @@ func canWriteToDir(dir string) bool {
 	return true
 }
 
+// isErrorMessage checks if a line is likely an error message
+func isErrorMessage(message string) bool {
+	lowercaseMsg := strings.ToLower(message)
+	errorKeywords := []string{"error", "fail", "fatal", "exception", "panic"}
+
+	for _, keyword := range errorKeywords {
+		if strings.Contains(lowercaseMsg, keyword) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // updateProgressBasedOnOutput updates the progress based on the output from helmfile
 func (self *DependenciesManager) updateProgressBasedOnOutput(output string) {
-	if containsString(output, "Processing releases") {
-		self.updateProgress("helmfile-sync", "Processing releases", 0.4)
-	} else if containsString(output, "Building dependency release") {
-		self.updateProgress("helmfile-sync", "Building dependencies", 0.5)
-	} else if containsString(output, "Installing release") {
-		self.updateProgress("helmfile-sync", "Installing releases", 0.6)
-	} else if containsString(output, "Upgrading release") {
-		self.updateProgress("helmfile-sync", "Upgrading releases", 0.7)
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return
+	}
+
+	if containsString(output, "Building dependency release") {
+		self.updateProgress("helmfile-sync", "Building dependencies", 0.40)
+	} else if containsString(output, "Processing releases") {
+		self.updateProgress("helmfile-sync", "Processing releases", 0.45)
+	} else if containsString(output, "Fetching chart") {
+		self.updateProgress("helmfile-sync", "Fetching charts", 0.50)
+	} else if containsString(output, "Preparing chart") || containsString(output, "Preparing values") {
+		self.updateProgress("helmfile-sync", "Preparing charts", 0.55)
+	} else if containsString(output, "Starting diff") {
+		self.updateProgress("helmfile-sync", "Comparing differences", 0.60)
+	} else if containsString(output, "release=") && containsString(output, "installed") {
+		self.updateProgress("helmfile-sync", "Installing releases", 0.70)
+	} else if containsString(output, "release=") && containsString(output, "upgraded") {
+		self.updateProgress("helmfile-sync", "Upgrading releases", 0.75)
 	} else if containsString(output, "Release was successful") {
-		self.updateProgress("helmfile-sync", "Release successful", 0.8)
+		self.updateProgress("helmfile-sync", "Release successful", 0.80)
+	} else if containsString(output, "release=") && containsString(output, "skipped") {
+		self.updateProgress("helmfile-sync", "Skipping unchanged releases", 0.85)
 	}
 }
 
 // containsString is a helper function to check if a string contains a substring
 func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && s[0:len(substr)] == substr
+	return strings.Contains(s, substr)
 }
