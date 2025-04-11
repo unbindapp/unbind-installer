@@ -13,8 +13,8 @@ import (
 // Model represents the application state
 type Model struct {
 	// State management
-	previousState ApplicationState
 	state         ApplicationState
+	showDebugLogs bool // New flag to indicate debug logs view
 
 	// Core data
 	osInfo *osinfo.OSInfo
@@ -70,6 +70,7 @@ func NewModel() Model {
 
 	return Model{
 		state:              StateWelcome,
+		showDebugLogs:      false, // Initialize debug logs flag
 		spinner:            s,
 		isLoading:          false,
 		styles:             styles,
@@ -110,12 +111,7 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "d":
 			if self.state != StateDNSConfig {
 				// Toggle debug logs view
-				if self.state != StateDebugLogs {
-					self.previousState = self.state
-					self.state = StateDebugLogs
-				} else {
-					self.state = self.previousState
-				}
+				self.showDebugLogs = !self.showDebugLogs
 				return self, nil
 			}
 		}
@@ -141,44 +137,58 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Delegate to state-specific handlers
+	var model tea.Model
+	var cmd tea.Cmd
+
 	switch self.state {
 	case StateWelcome:
-		return self.updateWelcomeState(msg)
+		model, cmd = self.updateWelcomeState(msg)
 	case StateLoading:
-		return self.updateLoadingState(msg)
+		model, cmd = self.updateLoadingState(msg)
 	case StateOSInfo:
-		return self.updateOSInfoState(msg)
+		model, cmd = self.updateOSInfoState(msg)
 	case StateInstallingPackages:
-		return self.updateInstallingPackagesState(msg)
+		model, cmd = self.updateInstallingPackagesState(msg)
 	case StateInstallComplete:
-		return self.updateInstallCompleteState(msg)
+		model, cmd = self.updateInstallCompleteState(msg)
 	case StateDetectingIPs:
-		return self.updateDetectingIPsState(msg)
+		model, cmd = self.updateDetectingIPsState(msg)
 	case StateDNSConfig:
-		return self.updateDNSConfigState(msg)
+		model, cmd = self.updateDNSConfigState(msg)
 	case StateDNSValidation:
-		return self.updateDNSValidationState(msg)
+		model, cmd = self.updateDNSValidationState(msg)
 	case StateDNSSuccess:
-		return self.updateDNSSuccessState(msg)
+		model, cmd = self.updateDNSSuccessState(msg)
 	case StateDNSFailed:
-		return self.updateDNSFailedState(msg)
-	case StateDebugLogs:
-		return self.updateDebugLogsState(msg)
+		model, cmd = self.updateDNSFailedState(msg)
 	case StateError:
-		return self.updateErrorState(msg)
+		model, cmd = self.updateErrorState(msg)
 	case StateInstallingK3S:
-		return self.updateInstallingK3SState(msg)
+		model, cmd = self.updateInstallingK3SState(msg)
 	case StateInstallingCilium:
-		return self.updateInstallingCiliumState(msg)
+		model, cmd = self.updateInstallingCiliumState(msg)
 	case StateInstallingUnbind:
-		return self.updateInstallingUnbindState(msg)
+		model, cmd = self.updateInstallingUnbindState(msg)
 	default:
 		return self, self.listenForLogs()
 	}
+
+	// Type assert the model back to our Model type
+	newModel, _ := model.(Model)
+
+	// Preserve the debug logs flag
+	newModel.showDebugLogs = self.showDebugLogs
+	return newModel, cmd
 }
 
 // View delegates to the appropriate view function based on state
 func (self Model) View() string {
+	// If debug logs are shown, show that view regardless of state
+	if self.showDebugLogs {
+		return viewDebugLogs(self)
+	}
+
+	// Otherwise show the current state's view
 	switch self.state {
 	case StateWelcome:
 		return viewWelcome(self)
@@ -202,8 +212,6 @@ func (self Model) View() string {
 		return viewDNSSuccess(self)
 	case StateDNSFailed:
 		return viewDNSFailed(self)
-	case StateDebugLogs:
-		return viewDebugLogs(self)
 	case StateInstallingK3S:
 		return viewInstallingK3S(self)
 	case StateInstallingCilium:
