@@ -208,7 +208,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Construct arguments for helmfile command
 				args := []string{
 					"--file", filepath.Join(repoDir, "helmfile.yaml"),
-					"--state-values-set", "globals.baseDomain=" + opts.BaseDomain,
+					"--state-values-set", "baseDomain=" + opts.BaseDomain,
 				}
 
 				// Add any additional values if present
