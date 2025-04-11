@@ -4,7 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/unbindapp/unbind-installer/internal/dependencies"
+	"github.com/unbindapp/unbind-installer/internal/installer"
 	"github.com/unbindapp/unbind-installer/internal/k3s"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"k8s.io/client-go/dynamic"
@@ -36,18 +36,18 @@ type Model struct {
 	domainInput textinput.Model
 
 	// Kube client
-	kubeConfig          string
-	kubeClient          *dynamic.DynamicClient
-	dependenciesManager *dependencies.DependenciesManager
+	kubeConfig      string
+	kubeClient      *dynamic.DynamicClient
+	unbindInstaller *installer.UnbindInstaller
 
 	// Progress statuses
 	k3sProgressChan chan k3s.K3SUpdateMessage
 	k3sProgress     k3s.K3SUpdateMessage
 	ciliumProgress  k3s.K3SUpdateMessage
 
-	// Dependencies after foundation is laid (helm charts, etc.)
-	dependencies []Dependency
-	progressChan chan dependencies.DependencyUpdateMsg
+	// Helmfile progress
+	unbindProgressChan chan installer.UnbindInstallUpdateMsg
+	unbindProgress     installer.UnbindInstallUpdateMsg
 }
 
 // NewModel initializes a new Model
@@ -63,20 +63,20 @@ func NewModel() Model {
 
 	logChan := make(chan string, 100) // Buffer for log messages
 
-	progressChan := make(chan dependencies.DependencyUpdateMsg)
+	progressChan := make(chan installer.UnbindInstallUpdateMsg)
 
 	// Initialize domain input
 	domainInput := initializeDomainInput()
 
 	return Model{
-		state:           StateWelcome,
-		spinner:         s,
-		isLoading:       false,
-		styles:          styles,
-		logMessages:     []string{},
-		logChan:         logChan,
-		progressChan:    progressChan,
-		k3sProgressChan: make(chan k3s.K3SUpdateMessage),
+		state:              StateWelcome,
+		spinner:            s,
+		isLoading:          false,
+		styles:             styles,
+		logMessages:        []string{},
+		logChan:            logChan,
+		unbindProgressChan: progressChan,
+		k3sProgressChan:    make(chan k3s.K3SUpdateMessage),
 		k3sProgress: k3s.K3SUpdateMessage{
 			Progress:    0.0,
 			Status:      "pending",
@@ -88,14 +88,6 @@ func NewModel() Model {
 			Description: "Initializing Cilium installation",
 		},
 		domainInput: domainInput,
-		dependencies: []Dependency{
-			{
-				Name:        "unbind",
-				Description: "Self-hosting done right",
-				Status:      dependencies.StatusPending,
-				Progress:    0.0,
-			},
-		},
 	}
 }
 
@@ -103,7 +95,7 @@ func NewModel() Model {
 func (self Model) Init() tea.Cmd {
 	return tea.Batch(
 		self.listenForLogs(),
-		self.listenForProgress(),
+		self.listenForUnbindProgress(),
 		self.listenForK3SProgress(),
 	)
 }
@@ -178,8 +170,8 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return self.updateInstallingK3SState(msg)
 	case StateInstallingCilium:
 		return self.updateInstallingCiliumState(msg)
-	case StateInstallingDependencies:
-		return self.updateInstallingDependenciesState(msg)
+	case StateInstallingUnbind:
+		return self.updateInstallingUnbindState(msg)
 	default:
 		return self, self.listenForLogs()
 	}
@@ -216,8 +208,8 @@ func (self Model) View() string {
 		return viewInstallingK3S(self)
 	case StateInstallingCilium:
 		return viewInstallingCilium(self)
-	case StateInstallingDependencies:
-		return viewInstallingDependencies(self)
+	case StateInstallingUnbind:
+		return viewInstallingUnbind(self)
 	default:
 		return viewWelcome(self)
 	}

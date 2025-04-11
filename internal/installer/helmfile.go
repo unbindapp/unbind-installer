@@ -1,4 +1,4 @@
-package dependencies
+package installer
 
 import (
 	"bufio"
@@ -22,15 +22,22 @@ type SyncHelmfileOptions struct {
 }
 
 // SyncHelmfileWithSteps performs a helmfile sync operation using the unbind-charts repository
-func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts SyncHelmfileOptions) error {
+func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts SyncHelmfileOptions) error {
 	var repoDir string
+	dependencyName := "helmfile-sync"
 
 	// Set defaults if not provided
 	if opts.RepoURL == "" {
 		opts.RepoURL = "https://github.com/unbindapp/unbind-charts.git"
 	}
 
-	return self.InstallDependencyWithSteps(ctx, "helmfile-sync", []InstallationStep{
+	// Initialize state for this dependency
+	self.ensureStateInitialized(dependencyName)
+
+	// Mark the beginning of installation
+	self.logProgress(dependencyName, 0.0, fmt.Sprintf("Starting helmfile sync with base domain %s", opts.BaseDomain), nil, StatusInstalling)
+
+	return self.InstallDependencyWithSteps(ctx, dependencyName, []InstallationStep{
 		{
 			Description: "Installing Helmfile",
 			Progress:    0.05,
@@ -39,11 +46,12 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 				cmd := exec.CommandContext(ctx, "helmfile", "--version")
 				out, err := cmd.CombinedOutput()
 				if err == nil {
-					self.sendLog(fmt.Sprintf("Helmfile is already installed: %s", strings.TrimSpace(string(out))))
+					msg := fmt.Sprintf("Helmfile is already installed: %s", strings.TrimSpace(string(out)))
+					self.logProgress(dependencyName, 0.05, msg, nil, StatusInstalling)
 					return nil
 				}
 
-				self.logProgress("helmfile-sync", 0.05, "Helmfile not found, installing...")
+				self.logProgress(dependencyName, 0.05, "Helmfile not found, installing...", nil, StatusInstalling)
 
 				// Create temp directory for download
 				tempDir, err := os.MkdirTemp("", "helmfile-*")
@@ -61,7 +69,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 				url := fmt.Sprintf("https://github.com/helmfile/helmfile/releases/download/v%s/helmfile_%s_%s_%s.tar.gz",
 					version, version, goos, goarch)
 
-				self.logProgress("helmfile-sync", 0.06, "Downloading Helmfile from %s", url)
+				self.logProgress(dependencyName, 0.06, fmt.Sprintf("Downloading Helmfile from %s", url), nil, StatusInstalling)
 
 				// Download helmfile
 				tarPath := filepath.Join(tempDir, "helmfile.tar.gz")
@@ -69,7 +77,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 					return fmt.Errorf("failed to download helmfile: %w", err)
 				}
 
-				self.logProgress("helmfile-sync", 0.07, "Extracting Helmfile")
+				self.logProgress(dependencyName, 0.07, "Extracting Helmfile", nil, StatusInstalling)
 
 				// Extract the file
 				cmd = exec.CommandContext(ctx, "tar", "-xzf", tarPath, "-C", tempDir)
@@ -79,7 +87,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 
 				// Find an appropriate bin directory
 				binPath := "/usr/local/bin"
-				self.logProgress("helmfile-sync", 0.08, "Checking installation directory")
+				self.logProgress(dependencyName, 0.08, "Checking installation directory", nil, StatusInstalling)
 
 				if !canWriteToDir(binPath) {
 					// Try user's local bin directory instead
@@ -98,7 +106,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 					}
 				}
 
-				self.logProgress("helmfile-sync", 0.09, "Installing Helmfile to %s", binPath)
+				self.logProgress(dependencyName, 0.09, fmt.Sprintf("Installing Helmfile to %s", binPath), nil, StatusInstalling)
 
 				// Copy the binary
 				sourcePath := filepath.Join(tempDir, "helmfile")
@@ -120,7 +128,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 					return fmt.Errorf("helmfile installation verification failed: %w", err)
 				}
 
-				self.logProgress("helmfile-sync", 0.10, "Helmfile successfully installed: %s", strings.TrimSpace(string(out)))
+				self.logProgress(dependencyName, 0.10, fmt.Sprintf("Helmfile successfully installed: %s", strings.TrimSpace(string(out))), nil, StatusInstalling)
 
 				// Set helmfile path for later use
 				os.Setenv("HELMFILE_PATH", destPath)
@@ -144,7 +152,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 			Description: "Cloning repository",
 			Progress:    0.20,
 			Action: func(ctx context.Context) error {
-				self.logProgress("helmfile-sync", 0.21, "Cloning from %s", opts.RepoURL)
+				self.logProgress(dependencyName, 0.21, fmt.Sprintf("Cloning from %s", opts.RepoURL), nil, StatusInstalling)
 
 				cmd := exec.CommandContext(ctx, "git", "clone", opts.RepoURL, repoDir)
 
@@ -183,7 +191,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 					return fmt.Errorf("failed to clone repository: %w", err)
 				}
 
-				self.logProgress("helmfile-sync", 0.29, "Repository cloned successfully to %s", repoDir)
+				self.logProgress(dependencyName, 0.29, fmt.Sprintf("Repository cloned successfully to %s", repoDir), nil, StatusInstalling)
 				return nil
 			},
 		},
@@ -211,7 +219,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 				// Add final "sync" command
 				args = append(args, "sync")
 
-				self.logProgress("helmfile-sync", 0.31, "Starting helmfile sync with baseDomain=%s", opts.BaseDomain)
+				self.logProgress(dependencyName, 0.31, fmt.Sprintf("Starting helmfile sync with baseDomain=%s", opts.BaseDomain), nil, StatusInstalling)
 
 				// Set up the command to run helmfile sync
 				cmd := exec.CommandContext(ctx, helmfilePath, args...)
@@ -243,12 +251,16 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 				stderrScanner := bufio.NewScanner(stderrPipe)
 				stderrScanner.Buffer(make([]byte, 4096), 1024*1024) // Increase buffer size
 
+				// Sync start time
+				syncStartTime := time.Now()
+				self.sendLog(fmt.Sprintf("Helmfile sync started at %v", syncStartTime.Format(time.RFC3339)))
+
 				// Run scanners in separate goroutines
 				go func() {
 					for stdoutScanner.Scan() {
 						line := stdoutScanner.Text()
 						self.sendLog(line)
-						self.updateProgressBasedOnOutput(line)
+						self.updateProgressBasedOnOutput(dependencyName, line)
 					}
 				}()
 
@@ -261,21 +273,21 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 						} else {
 							self.sendLog(line)
 						}
-						self.updateProgressBasedOnOutput(line)
+						self.updateProgressBasedOnOutput(dependencyName, line)
 					}
 				}()
 
 				// Wait for the command to complete
-				syncStartTime := time.Now()
 				err = cmd.Wait()
 				syncDuration := time.Since(syncStartTime).Round(time.Second)
 
 				if err != nil {
+					failMsg := fmt.Sprintf("Helmfile sync failed after %v: %v", syncDuration, err)
+					self.logProgress(dependencyName, 0.30, failMsg, err, StatusFailed)
 					return fmt.Errorf("helmfile sync failed after %v: %w", syncDuration, err)
 				}
 
-				self.logProgress("helmfile-sync", 0.90,
-					"Helmfile sync completed successfully in %v", syncDuration)
+				self.logProgress(dependencyName, 0.90, fmt.Sprintf("Helmfile sync completed successfully in %v", syncDuration), nil, StatusInstalling)
 				return nil
 			},
 		},
@@ -286,7 +298,8 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 				// Clean up the temporary directory
 				if repoDir != "" {
 					if err := os.RemoveAll(repoDir); err != nil {
-						self.sendLog(fmt.Sprintf("Warning: failed to clean up repository directory %s: %v", repoDir, err))
+						warningMsg := fmt.Sprintf("Warning: failed to clean up repository directory %s: %v", repoDir, err)
+						self.sendLog(warningMsg)
 						// We'll consider this a non-fatal error
 					} else {
 						self.sendLog("Cleaned up temporary repository directory")
@@ -303,7 +316,7 @@ func (self *DependenciesManager) SyncHelmfileWithSteps(ctx context.Context, opts
 }
 
 // Helper function to download a file with progress updates
-func (self *DependenciesManager) downloadFileWithProgress(url, filepath string) error {
+func (self *UnbindInstaller) downloadFileWithProgress(url, filepath string) error {
 	// Create the file
 	out, err := os.Create(filepath)
 	if err != nil {
@@ -328,8 +341,10 @@ func (self *DependenciesManager) downloadFileWithProgress(url, filepath string) 
 	// Create a progress tracker
 	counter := &writeCounter{
 		Total:         fileSize,
-		Manager:       self,
+		Downloaded:    int64(0),
+		Installer:     self,
 		Dependency:    "helmfile-sync",
+		LastProgress:  float64(0),
 		StartProgress: 0.06,
 		EndProgress:   0.07,
 	}
@@ -343,7 +358,7 @@ func (self *DependenciesManager) downloadFileWithProgress(url, filepath string) 
 type writeCounter struct {
 	Total         int64
 	Downloaded    int64
-	Manager       *DependenciesManager
+	Installer     *UnbindInstaller
 	Dependency    string
 	LastProgress  float64
 	StartProgress float64
@@ -365,9 +380,9 @@ func (wc *writeCounter) Write(p []byte) (int, error) {
 	// Scale the progress to our range
 	scaledProgress := wc.StartProgress + (percentage * (wc.EndProgress - wc.StartProgress))
 
-	// Only update every 10% to avoid flooding
+	// Only update every 1% to avoid flooding
 	if scaledProgress-wc.LastProgress >= 0.01 {
-		wc.Manager.updateProgress(wc.Dependency, "Downloading Helmfile", scaledProgress)
+		wc.Installer.logProgress(wc.Dependency, scaledProgress, "Downloading Helmfile", nil, StatusInstalling)
 		wc.LastProgress = scaledProgress
 	}
 
@@ -400,31 +415,48 @@ func isErrorMessage(message string) bool {
 }
 
 // updateProgressBasedOnOutput updates the progress based on the output from helmfile
-func (self *DependenciesManager) updateProgressBasedOnOutput(output string) {
+func (self *UnbindInstaller) updateProgressBasedOnOutput(dependency string, output string) {
 	output = strings.TrimSpace(output)
 	if output == "" {
 		return
 	}
 
+	var progress float64
+	var description string
+
 	if containsString(output, "Building dependency release") {
-		self.updateProgress("helmfile-sync", "Building dependencies", 0.40)
+		progress = 0.40
+		description = "Building dependencies"
 	} else if containsString(output, "Processing releases") {
-		self.updateProgress("helmfile-sync", "Processing releases", 0.45)
+		progress = 0.45
+		description = "Processing releases"
 	} else if containsString(output, "Fetching chart") {
-		self.updateProgress("helmfile-sync", "Fetching charts", 0.50)
+		progress = 0.50
+		description = "Fetching charts"
 	} else if containsString(output, "Preparing chart") || containsString(output, "Preparing values") {
-		self.updateProgress("helmfile-sync", "Preparing charts", 0.55)
+		progress = 0.55
+		description = "Preparing charts"
 	} else if containsString(output, "Starting diff") {
-		self.updateProgress("helmfile-sync", "Comparing differences", 0.60)
+		progress = 0.60
+		description = "Comparing differences"
 	} else if containsString(output, "release=") && containsString(output, "installed") {
-		self.updateProgress("helmfile-sync", "Installing releases", 0.70)
+		progress = 0.70
+		description = "Installing releases"
 	} else if containsString(output, "release=") && containsString(output, "upgraded") {
-		self.updateProgress("helmfile-sync", "Upgrading releases", 0.75)
+		progress = 0.75
+		description = "Upgrading releases"
 	} else if containsString(output, "Release was successful") {
-		self.updateProgress("helmfile-sync", "Release successful", 0.80)
+		progress = 0.80
+		description = "Release successful"
 	} else if containsString(output, "release=") && containsString(output, "skipped") {
-		self.updateProgress("helmfile-sync", "Skipping unchanged releases", 0.85)
+		progress = 0.85
+		description = "Skipping unchanged releases"
+	} else {
+		// No recognized pattern, don't update progress
+		return
 	}
+
+	self.logProgress(dependency, progress, description, nil, StatusInstalling)
 }
 
 // containsString is a helper function to check if a string contains a substring

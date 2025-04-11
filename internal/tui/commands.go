@@ -2,15 +2,14 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/unbindapp/unbind-installer/internal/dependencies"
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
+	unbindInstaller "github.com/unbindapp/unbind-installer/internal/installer"
 	"github.com/unbindapp/unbind-installer/internal/k3s"
 	"github.com/unbindapp/unbind-installer/internal/network"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
@@ -186,16 +185,16 @@ func (self Model) installK3S() tea.Cmd {
 		}
 
 		// create dependencies manager
-		dm, err := dependencies.NewDependenciesManager(kubeConfig, self.logChan, self.progressChan)
+		dm, err := unbindInstaller.NewUnbindInstaller(kubeConfig, self.logChan, self.unbindProgressChan)
 		if err != nil {
 			self.logChan <- fmt.Sprintf("Dependencies manager creation failed: %s", err.Error())
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("Dependencies manager creation failed: %s", err.Error()))}
 		}
 
 		return k3sInstallCompleteMsg{
-			kubeConfig:          kubeConfig,
-			kubeClient:          client,
-			dependenciesManager: dm,
+			kubeConfig:      kubeConfig,
+			kubeClient:      client,
+			unbindInstaller: dm,
 		}
 	}
 }
@@ -221,50 +220,22 @@ func (self Model) installCilium() tea.Cmd {
 	}
 }
 
-// Improved installDependencies function with better logging and error handling
-func (self Model) installDependencies() tea.Cmd {
+// installUnbind installs the unbind helmfile
+func (self Model) installUnbind() tea.Cmd {
 	return func() tea.Msg {
-		// Add a debug log to confirm we've entered this function
-		self.logChan <- "Starting dependencies installation..."
-
 		// Create a context with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 
-		// Make sure dependencies manager exists
-		if self.dependenciesManager == nil {
-			errDescription := "Dependencies manager is nil, cannot install dependencies"
-			self.logChan <- errDescription
-			return errMsg{err: errors.New(errDescription)}
+		// Install K3S
+		err := self.unbindInstaller.SyncHelmfileWithSteps(ctx, unbindInstaller.SyncHelmfileOptions{
+			BaseDomain: self.dnsInfo.Domain,
+		})
+		if err != nil {
+			self.logChan <- fmt.Sprintf("Unbind installation failed: %s", err.Error())
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("Unbind installation failed: %s", err.Error()))}
 		}
 
-		// Log the dependencies we're going to install
-		self.logChan <- fmt.Sprintf("Found %d dependencies to install", len(self.dependencies))
-
-		// Install each dependency
-		for _, dep := range self.dependencies {
-			self.logChan <- fmt.Sprintf("Starting installation of %s...", dep.Name)
-
-			switch dep.Name {
-			case "unbind":
-				// Install unbind
-				err := self.dependenciesManager.SyncHelmfileWithSteps(ctx, dependencies.SyncHelmfileOptions{
-					BaseDomain: self.dnsInfo.Domain,
-				})
-				if err != nil {
-					errMessage := fmt.Sprintf("Failed to install %s: %v", dep.Name, err)
-					self.logChan <- errMessage
-					return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeDependencyInstallFailed, fmt.Sprintf("Failed to install %s: %v", dep.Name, err))}
-				}
-
-				self.logChan <- fmt.Sprintf("Successfully installed %s", dep.Name)
-
-			default:
-				self.logChan <- fmt.Sprintf("Unknown dependency: %s, skipping", dep.Name)
-			}
-		}
-
-		self.logChan <- "All dependencies installed successfully"
-		return dependencyInstallCompleteMsg{}
+		return unbindInstallCompleteMsg{}
 	}
 }

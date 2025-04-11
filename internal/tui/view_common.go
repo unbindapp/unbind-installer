@@ -101,7 +101,7 @@ func viewError(m Model) string {
 		s.WriteString(m.styles.Error.Render("Sorry, I couldn't detect your network interfaces!"))
 		s.WriteString("\n")
 		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'd'."))
-	} else if errors.Is(m.err, errdefs.ErrDependencyInstallFailed) {
+	} else if errors.Is(m.err, errdefs.ErrUnbindInstallFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, a critical dependency installation failed!"))
 		s.WriteString("\n")
 		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'd'."))

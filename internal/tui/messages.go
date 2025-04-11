@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/unbindapp/unbind-installer/internal/dependencies"
+	"github.com/unbindapp/unbind-installer/internal/installer"
 	"github.com/unbindapp/unbind-installer/internal/network"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"k8s.io/client-go/dynamic"
@@ -49,13 +49,13 @@ type manualContinueMsg struct{}
 // * K3S
 
 type k3sInstallCompleteMsg struct {
-	kubeConfig          string
-	kubeClient          *dynamic.DynamicClient
-	dependenciesManager *dependencies.DependenciesManager
+	kubeConfig      string
+	kubeClient      *dynamic.DynamicClient
+	unbindInstaller *installer.UnbindInstaller
 }
 
 type ciliumInstallCompleteMsg struct{}
 
 // * Dependencies
-// dependencyInstallCompleteMsg is sent when all dependencies are installed
-type dependencyInstallCompleteMsg struct{}
+// unbindInstallCompleteMsg is sent when all dependencies are installed
+type unbindInstallCompleteMsg struct{}

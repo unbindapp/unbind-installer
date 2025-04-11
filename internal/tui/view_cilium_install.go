@@ -163,11 +163,11 @@ func (m Model) updateInstallingCiliumState(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ciliumInstallCompleteMsg:
 		// Move to next state after Cilium is installed
-		m.state = StateInstallingDependencies
+		m.state = StateInstallingUnbind
 		m.isLoading = true
 		return m, tea.Batch(
 			m.spinner.Tick,
-			m.installDependencies(),
+			m.installUnbind(),
 			m.listenForLogs(),
 		)
 

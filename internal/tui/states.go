@@ -21,7 +21,7 @@ const (
 	StateDNSFailed
 	StateInstallingK3S
 	StateInstallingCilium
-	StateInstallingDependencies
+	StateInstallingUnbind
 )
 
 // Additional model fields for DNS setup

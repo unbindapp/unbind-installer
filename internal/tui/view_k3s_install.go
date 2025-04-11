@@ -153,7 +153,7 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForProgress())
+		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForK3SProgress())
 
 	case k3s.K3SUpdateMessage:
 		// Log that we received a progress update (for debugging)
@@ -170,9 +170,9 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				// Replace these with your actual values
 				return k3sInstallCompleteMsg{
-					kubeClient:          nil,                         // Your actual kubeClient
-					kubeConfig:          "/etc/rancher/k3s/k3s.yaml", // Your actual kubeConfig
-					dependenciesManager: nil,                         // Your actual dependenciesManager
+					kubeClient:      nil,                         // Your actual kubeClient
+					kubeConfig:      "/etc/rancher/k3s/k3s.yaml", // Your actual kubeConfig
+					unbindInstaller: nil,                         // Your actual unbindInstaller
 				}
 			}
 		} else if msg.Status == "failed" {
@@ -189,7 +189,7 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = true
 		m.kubeClient = msg.kubeClient
 		m.kubeConfig = msg.kubeConfig
-		m.dependenciesManager = msg.dependenciesManager
+		m.unbindInstaller = msg.unbindInstaller
 		return m, tea.Batch(
 			m.spinner.Tick,
 			m.installCilium(),
