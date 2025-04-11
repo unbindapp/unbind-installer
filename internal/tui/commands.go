@@ -233,7 +233,7 @@ func (self Model) installUnbind() tea.Cmd {
 		})
 		if err != nil {
 			self.logChan <- fmt.Sprintf("Unbind installation failed: %s", err.Error())
-			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("Unbind installation failed: %s", err.Error()))}
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeUnbindInstallFailed, fmt.Sprintf("Unbind installation failed: %s", err.Error()))}
 		}
 
 		return unbindInstallCompleteMsg{}
