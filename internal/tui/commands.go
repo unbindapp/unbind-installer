@@ -38,10 +38,6 @@ func (self Model) listenForLogs() tea.Cmd {
 // checkK3sCommand checks for an existing K3s installation.
 func checkK3sCommand() tea.Cmd {
 	return func() tea.Msg {
-		// Root check might be redundant if done earlier, but safe to keep
-		if os.Geteuid() != 0 {
-			return errMsg{err: errdefs.ErrNotRoot}
-		}
 		result, err := k3s.CheckInstalled()
 		return k3sCheckResultMsg{checkResult: result, err: err}
 	}

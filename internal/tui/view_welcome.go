@@ -97,7 +97,7 @@ func (m Model) updateWelcomeState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.isLoading = true
 			return m, tea.Batch(
 				m.spinner.Tick,
-				detectOSInfo,
+				checkK3sCommand(),
 				m.listenForLogs(),
 			)
 		}
