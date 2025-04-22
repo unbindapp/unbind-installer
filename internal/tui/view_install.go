@@ -39,6 +39,7 @@ func viewInstallingPackages(m Model) string {
 		"wget",
 		"ca-certificates",
 		"apt-transport-https",
+		"apache2-utils",
 	}
 
 	for _, pkg := range packages {
