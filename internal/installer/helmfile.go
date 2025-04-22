@@ -238,7 +238,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 						select {
 						case <-ticker.C:
 							if currentProgress < 0.85 {
-								currentProgress += 0.05
+								currentProgress += 0.005
 								self.logProgress(dependencyName, currentProgress, self.state[dependencyName].description, nil, StatusInstalling)
 							}
 						case <-waitDone:
