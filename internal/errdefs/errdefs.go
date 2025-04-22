@@ -12,6 +12,7 @@ var (
 	ErrNotRoot                     = errors.New("This installer must be run with root privileges")
 	ErrNetworkDetectionFailed      = errors.New("Network detection failed")
 	ErrK3sInstallFailed            = NewCustomError(ErrTypeK3sInstallFailed, "")
+	ErrK3sUninstallFailed          = NewCustomError(ErrTypeK3sUninstallFailed, "")
 	ErrNotLinux                    = NewCustomError(ErrTypeNotLinux, "")
 	ErrInvalidArchitecture         = NewCustomError(ErrTypeInvalidArchitecture, "")
 	ErrDistributionDetectionFailed = NewCustomError(ErrTypeDistributionDetectionFailed, "")
@@ -28,6 +29,7 @@ const (
 	ErrTypeUnsupportedDistribution
 	ErrTypeUnsupportedVersion
 	ErrTypeK3sInstallFailed
+	ErrTypeK3sUninstallFailed
 	ErrTypeUnbindInstallFailed
 )
 
@@ -38,6 +40,7 @@ var errorTypeStrings = map[ErrorType]string{
 	ErrTypeUnsupportedDistribution:     "ErrUnsupportedDistribution",
 	ErrTypeUnsupportedVersion:          "ErrUnsupportedVersion",
 	ErrTypeK3sInstallFailed:            "ErrK3sInstallFailed",
+	ErrTypeK3sUninstallFailed:          "ErrK3sUninstallFailed",
 	ErrTypeUnbindInstallFailed:         "ErrUnbindInstallFailed",
 }
 

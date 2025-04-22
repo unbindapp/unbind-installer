@@ -17,8 +17,9 @@ type Model struct {
 	showDebugLogs bool // New flag to indicate debug logs view
 
 	// Core data
-	osInfo *osinfo.OSInfo
-	err    error
+	osInfo                 *osinfo.OSInfo
+	err                    error
+	k3sUninstallScriptPath string
 
 	// UI components
 	spinner   spinner.Model
@@ -143,6 +144,12 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch self.state {
 	case StateWelcome:
 		model, cmd = self.updateWelcomeState(msg)
+	case StateCheckK3s:
+		model, cmd = self.updateCheckK3sState(msg)
+	case StateConfirmUninstallK3s:
+		model, cmd = self.updateConfirmUninstallK3sState(msg)
+	case StateUninstallingK3s:
+		model, cmd = self.updateUninstallingK3sState(msg)
 	case StateLoading:
 		model, cmd = self.updateLoadingState(msg)
 	case StateOSInfo:
@@ -192,6 +199,12 @@ func (self Model) View() string {
 	switch self.state {
 	case StateWelcome:
 		return viewWelcome(self)
+	case StateCheckK3s:
+		return viewCheckK3s(self)
+	case StateConfirmUninstallK3s:
+		return viewConfirmUninstallK3s(self)
+	case StateUninstallingK3s:
+		return viewUninstallingK3s(self)
 	case StateLoading:
 		return viewLoading(self)
 	case StateError:

@@ -7,6 +7,9 @@ type ApplicationState int
 
 const (
 	StateWelcome ApplicationState = iota
+	StateCheckK3s
+	StateConfirmUninstallK3s
+	StateUninstallingK3s
 	StateDebugLogs
 	StateLoading
 	StateRootDetection

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/unbindapp/unbind-installer/internal/installer"
+	"github.com/unbindapp/unbind-installer/internal/k3s"
 	"github.com/unbindapp/unbind-installer/internal/network"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"k8s.io/client-go/dynamic"
@@ -53,6 +54,16 @@ type k3sInstallCompleteMsg struct {
 	kubeConfig      string
 	kubeClient      *dynamic.DynamicClient
 	unbindInstaller *installer.UnbindInstaller
+}
+
+type k3sCheckResultMsg struct {
+	checkResult *k3s.CheckResult
+	err         error
+}
+
+// k3sUninstallCompleteMsg is sent when the K3s uninstall process finishes.
+type k3sUninstallCompleteMsg struct {
+	err error
 }
 
 type ciliumInstallCompleteMsg struct{}
