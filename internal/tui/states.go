@@ -33,6 +33,7 @@ type dnsInfo struct {
 	ValidationStarted  bool
 	ValidationSuccess  bool
 	CloudflareDetected bool
+	RegistryIssue      bool
 	TestingStartTime   time.Time
 	ValidationDuration time.Duration
 }

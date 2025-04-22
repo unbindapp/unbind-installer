@@ -123,6 +123,19 @@ func (self Model) startDNSValidation() tea.Cmd {
 		}
 
 		if cloudflareSuccessCount == 2 {
+			// Check registry
+			cloudflareRegistry := network.CheckCloudflareProxy("registry."+baseDomain, func(msg string) {
+				self.logChan <- msg
+			})
+
+			if cloudflareRegistry {
+				return dnsValidationCompleteMsg{
+					success:       false,
+					cloudflare:    true,
+					registryIssue: true,
+				}
+			}
+
 			return dnsValidationCompleteMsg{
 				success:    true,
 				cloudflare: true,

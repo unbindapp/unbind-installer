@@ -224,6 +224,31 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Set up the command to run helmfile sync
 				cmd := exec.CommandContext(ctx, helmfilePath, args...)
 
+				// Start progress updates during wait
+				waitDone := make(chan error, 1)
+
+				// Tick progress slowly
+				go func() {
+					currentProgress := 0.35
+
+					ticker := time.NewTicker(5 * time.Second)
+					defer ticker.Stop()
+
+					for {
+						select {
+						case <-ticker.C:
+							if currentProgress < 0.85 {
+								currentProgress += 0.05
+								self.logProgress(dependencyName, currentProgress, self.state[dependencyName].description, nil, StatusInstalling)
+							}
+						case <-waitDone:
+							return
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
+
 				// Set the current working directory
 				cmd.Dir = repoDir
 
@@ -280,6 +305,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Wait for the command to complete
 				err = cmd.Wait()
 				syncDuration := time.Since(syncStartTime).Round(time.Second)
+				close(waitDone)
 
 				if err != nil {
 					failMsg := fmt.Sprintf("Helmfile sync failed after %v: %v", syncDuration, err)
@@ -425,7 +451,7 @@ func (self *UnbindInstaller) updateProgressBasedOnOutput(dependency string, outp
 	var description string
 
 	if containsString(output, "Building dependency release") {
-		progress = 0.40
+		progress = 0.35
 		description = "Building dependencies"
 	} else if containsString(output, "Processing releases") {
 		progress = 0.45

@@ -38,8 +38,9 @@ type dnsValidationMsg struct{}
 type autoAdvanceMsg struct{}
 
 type dnsValidationCompleteMsg struct {
-	success    bool
-	cloudflare bool
+	success       bool
+	cloudflare    bool
+	registryIssue bool
 }
 
 type dnsValidationTimeoutMsg struct{}

@@ -136,6 +136,8 @@ func viewDNSConfig(m Model) string {
 	s.WriteString(m.styles.Normal.Render("2. Create an 'A' record for *.yourdomain.com pointing to your external IP"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("3. Enter your domain below and press Enter to validate"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Subtle.Render("If using Cloudflare, you should create another 'A' record for registry.yourdomain.com with proxy disabled (orange cloud off)"))
 	s.WriteString("\n\n")
 
 	// Domain input field
@@ -266,6 +268,7 @@ func (m Model) updateDNSValidationState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dnsValidationCompleteMsg:
 		m.dnsInfo.ValidationSuccess = msg.success
 		m.dnsInfo.CloudflareDetected = msg.cloudflare
+		m.dnsInfo.RegistryIssue = msg.registryIssue
 		m.dnsInfo.ValidationDuration = time.Since(m.dnsInfo.TestingStartTime)
 
 		if msg.success {
@@ -390,27 +393,34 @@ func viewDNSFailed(m Model) string {
 	s.WriteString(m.styles.Error.Render("! DNS Configuration Validation Failed"))
 	s.WriteString("\n\n")
 
-	// Failure details
-	s.WriteString(m.styles.Bold.Render("Domain: "))
-	s.WriteString(m.styles.Normal.Render(m.dnsInfo.Domain))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Bold.Render("Expected to point to: "))
-	s.WriteString(m.styles.Normal.Render(m.dnsInfo.ExternalIP))
-	s.WriteString("\n\n")
+	if m.dnsInfo.RegistryIssue {
+		s.WriteString(m.styles.Bold.Render("! Registry DNS configuration issue detected"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("Please ensure that cloudflare proxy is disabled for registry.yourdomain.com"))
+		s.WriteString("\n\n")
+	} else {
+		// Failure details
+		s.WriteString(m.styles.Bold.Render("Domain: "))
+		s.WriteString(m.styles.Normal.Render(m.dnsInfo.Domain))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Bold.Render("Expected to point to: "))
+		s.WriteString(m.styles.Normal.Render(m.dnsInfo.ExternalIP))
+		s.WriteString("\n\n")
 
-	// Validation details
-	s.WriteString(m.styles.Subtle.Render(fmt.Sprintf("Validation attempted for %.1f seconds", m.dnsInfo.ValidationDuration.Seconds())))
-	s.WriteString("\n\n")
+		// Validation details
+		s.WriteString(m.styles.Subtle.Render(fmt.Sprintf("Validation attempted for %.1f seconds", m.dnsInfo.ValidationDuration.Seconds())))
+		s.WriteString("\n\n")
 
-	// Troubleshooting tips
-	s.WriteString(m.styles.Bold.Render("Troubleshooting Tips:"))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("1. Verify you created an 'A' record with a wildcard (*) subdomain"))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("2. Ensure the A record points to your external IP: " + m.dnsInfo.ExternalIP))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("3. DNS changes can take time to propagate (sometimes up to 24-48 hours)"))
-	s.WriteString("\n\n")
+		// Troubleshooting tips
+		s.WriteString(m.styles.Bold.Render("Troubleshooting Tips:"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("1. Verify you created an 'A' record with a wildcard (*) subdomain"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("2. Ensure the A record points to your external IP: " + m.dnsInfo.ExternalIP))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("3. DNS changes can take time to propagate (sometimes up to 24-48 hours)"))
+		s.WriteString("\n\n")
+	}
 
 	// Options
 	s.WriteString(m.styles.Bold.Render("Options:"))
