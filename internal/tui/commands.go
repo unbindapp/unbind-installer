@@ -73,6 +73,7 @@ func (self Model) installRequiredPackages() tea.Cmd {
 			"wget",
 			"ca-certificates",
 			"apt-transport-https",
+			"apache2-utils",
 		}
 
 		// Create a new apt installer
