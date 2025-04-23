@@ -28,7 +28,6 @@ const (
 	StateDNSSuccess
 	StateDNSFailed
 	StateInstallingK3S
-	StateInstallingCilium
 	StateInstallingUnbind
 )
 

@@ -81,8 +81,6 @@ type k3sUninstallCompleteMsg struct {
 	err error
 }
 
-type ciliumInstallCompleteMsg struct{}
-
 // * Dependencies
 // unbindInstallCompleteMsg is sent when all dependencies are installed
 type unbindInstallCompleteMsg struct{}

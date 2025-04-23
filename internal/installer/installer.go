@@ -11,11 +11,10 @@ import (
 )
 
 type UnbindInstaller struct {
-	progressChan chan<- UnbindInstallUpdateMsg
-	kubeClient   *kubernetes.Clientset
-	LogChan      chan<- string
-	helmEnv      *cli.EnvSettings
-	// Add state tracking similar to CiliumInstaller
+	progressChan   chan<- UnbindInstallUpdateMsg
+	kubeClient     *kubernetes.Clientset
+	LogChan        chan<- string
+	helmEnv        *cli.EnvSettings
 	state          map[string]*dependencyState
 	kubeConfigPath string
 }

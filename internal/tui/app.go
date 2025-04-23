@@ -50,7 +50,6 @@ type Model struct {
 	// Progress statuses
 	k3sProgressChan chan k3s.K3SUpdateMessage
 	k3sProgress     k3s.K3SUpdateMessage
-	ciliumProgress  k3s.K3SUpdateMessage
 
 	// Helmfile progress
 	unbindProgressChan chan installer.UnbindInstallUpdateMsg
@@ -106,11 +105,6 @@ func NewModel() Model {
 			Progress:    0.0,
 			Status:      "pending",
 			Description: "Initializing K3S installation",
-		},
-		ciliumProgress: k3s.K3SUpdateMessage{
-			Progress:    0.0,
-			Status:      "pending",
-			Description: "Initializing Cilium installation",
 		},
 		domainInput:   domainInput,
 		swapSizeInput: swapInput,
@@ -206,8 +200,6 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = self.updateErrorState(msg)
 	case StateInstallingK3S:
 		model, cmd = self.updateInstallingK3SState(msg)
-	case StateInstallingCilium:
-		model, cmd = self.updateInstallingCiliumState(msg)
 	case StateInstallingUnbind:
 		model, cmd = self.updateInstallingUnbindState(msg)
 	default:
@@ -271,8 +263,6 @@ func (self Model) View() string {
 		return viewDNSFailed(self)
 	case StateInstallingK3S:
 		return viewInstallingK3S(self)
-	case StateInstallingCilium:
-		return viewInstallingCilium(self)
 	case StateInstallingUnbind:
 		return viewInstallingUnbind(self)
 	default:
