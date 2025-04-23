@@ -406,6 +406,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 
 				// Set up the command to run helmfile sync
 				cmd := exec.CommandContext(ctx, helmfilePath, args...)
+				cmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.kubeConfigPath))
 
 				// Start progress updates during wait
 				waitDone := make(chan error, 1)

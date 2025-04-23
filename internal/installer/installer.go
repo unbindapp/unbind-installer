@@ -16,7 +16,8 @@ type UnbindInstaller struct {
 	LogChan      chan<- string
 	helmEnv      *cli.EnvSettings
 	// Add state tracking similar to CiliumInstaller
-	state map[string]*dependencyState
+	state          map[string]*dependencyState
+	kubeConfigPath string
 }
 
 // dependencyState tracks installation state for a dependency
@@ -52,11 +53,12 @@ func NewUnbindInstaller(kubeConfig string, logChan chan<- string, progressChan c
 	}
 
 	return &UnbindInstaller{
-		progressChan: progressChan,
-		kubeClient:   clientset,
-		LogChan:      logChan,
-		helmEnv:      cli.New(),
-		state:        make(map[string]*dependencyState),
+		progressChan:   progressChan,
+		kubeConfigPath: kubeConfig,
+		kubeClient:     clientset,
+		LogChan:        logChan,
+		helmEnv:        cli.New(),
+		state:          make(map[string]*dependencyState),
 	}, nil
 }
 
