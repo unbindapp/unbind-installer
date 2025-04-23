@@ -145,6 +145,77 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 			},
 		},
 		{
+			Description: "Installing Helm Diff Plugin",
+			Progress:    0.045,
+			Action: func(ctx context.Context) error {
+				// Get helm path (if we installed it) or use "helm" command
+				helmPath := os.Getenv("HELM_PATH")
+				if helmPath == "" {
+					helmPath = "helm"
+				}
+
+				// Check if diff plugin is already installed
+				cmd := exec.CommandContext(ctx, helmPath, "plugin", "list")
+				out, err := cmd.CombinedOutput()
+
+				if err == nil && strings.Contains(string(out), "diff") {
+					msg := "Helm diff plugin is already installed"
+					self.logProgress(dependencyName, 0.046, msg, nil, StatusInstalling)
+					return nil
+				}
+
+				self.logProgress(dependencyName, 0.046, "Helm diff plugin not found, installing...", nil, StatusInstalling)
+
+				// Install the diff plugin
+				cmd = exec.CommandContext(ctx, helmPath, "plugin", "install", "https://github.com/databus23/helm-diff")
+
+				// Stream the output
+				stdoutPipe, err := cmd.StdoutPipe()
+				if err != nil {
+					return fmt.Errorf("failed to create helm plugin stdout pipe: %w", err)
+				}
+
+				stderrPipe, err := cmd.StderrPipe()
+				if err != nil {
+					return fmt.Errorf("failed to create helm plugin stderr pipe: %w", err)
+				}
+
+				if err := cmd.Start(); err != nil {
+					return fmt.Errorf("failed to start helm plugin install: %w", err)
+				}
+
+				// Stream stdout
+				go func() {
+					scanner := bufio.NewScanner(stdoutPipe)
+					for scanner.Scan() {
+						self.sendLog("helm plugin: " + scanner.Text())
+					}
+				}()
+
+				// Stream stderr
+				go func() {
+					scanner := bufio.NewScanner(stderrPipe)
+					for scanner.Scan() {
+						self.sendLog("helm plugin error: " + scanner.Text())
+					}
+				}()
+
+				if err := cmd.Wait(); err != nil {
+					return fmt.Errorf("failed to install helm diff plugin: %w", err)
+				}
+
+				// Verify installation
+				cmd = exec.CommandContext(ctx, helmPath, "plugin", "list")
+				out, err = cmd.CombinedOutput()
+				if err != nil || !strings.Contains(string(out), "diff") {
+					return fmt.Errorf("helm diff plugin installation verification failed: %w", err)
+				}
+
+				self.logProgress(dependencyName, 0.049, "Helm diff plugin successfully installed", nil, StatusInstalling)
+				return nil
+			},
+		},
+		{
 			Description: "Installing Helmfile",
 			Progress:    0.05,
 			Action: func(ctx context.Context) error {
