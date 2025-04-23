@@ -184,15 +184,15 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
 
 	case k3sInstallCompleteMsg:
-		// Install Cilium after K3S
-		m.state = StateInstallingCilium
+		// Install Unbind after K3S
+		m.state = StateInstallingUnbind
 		m.isLoading = true
 		m.kubeClient = msg.kubeClient
 		m.kubeConfig = msg.kubeConfig
 		m.unbindInstaller = msg.unbindInstaller
 		return m, tea.Batch(
 			m.spinner.Tick,
-			m.installCilium(),
+			m.installUnbind(),
 			m.listenForLogs(),
 		)
 

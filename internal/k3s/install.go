@@ -104,7 +104,7 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 // Install installs K3S using a step-based approach with progress tracking
 // Returns kube config path if successful, or an error if it fails
 func (self *Installer) Install(ctx context.Context) (string, error) {
-	k3sInstallFlags := "--flannel-backend=none --disable-kube-proxy --disable=servicelb --disable-network-policy --disable=traefik --kubelet-arg=fail-swap-on=false"
+	k3sInstallFlags := "--disable=traefik --kubelet-arg=fail-swap-on=false"
 
 	var kubeconfigPath string
 
