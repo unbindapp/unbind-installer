@@ -14,6 +14,11 @@ const (
 	StateLoading
 	StateRootDetection
 	StateOSInfo
+	StateCheckingSwap
+	StateConfirmCreateSwap
+	StateEnterSwapSize
+	StateCreatingSwap
+	StateSwapCreated
 	StateInstallingPackages
 	StateInstallComplete
 	StateError

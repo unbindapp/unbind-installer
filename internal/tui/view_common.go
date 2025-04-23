@@ -177,7 +177,7 @@ func (m Model) updateOSInfoState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = true
 		return m, tea.Batch(
 			m.spinner.Tick,
-			m.installRequiredPackages(),
+			m.checkSwapCommand(),
 			m.listenForLogs(),
 		)
 

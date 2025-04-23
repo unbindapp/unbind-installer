@@ -14,6 +14,7 @@ import (
 	"github.com/unbindapp/unbind-installer/internal/network"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"github.com/unbindapp/unbind-installer/internal/pkgmanager"
+	"github.com/unbindapp/unbind-installer/internal/system"
 )
 
 // listenForLogs returns a command that listens for log messages
@@ -62,6 +63,30 @@ func detectOSInfo() tea.Msg {
 		return errMsg{err}
 	}
 	return osInfoMsg{info}
+}
+
+// checkSwapCommand checks if swap is active.
+func (self Model) checkSwapCommand() tea.Cmd {
+	return func() tea.Msg {
+		isEnabled, err := system.CheckSwapActive(self.logChan)
+		return swapCheckResultMsg{isEnabled: isEnabled, err: err}
+	}
+}
+
+// getDiskSpaceCommand gets available disk space.
+func (self Model) getDiskSpaceCommand() tea.Cmd {
+	return func() tea.Msg {
+		gb, err := system.GetAvailableDiskSpaceGB(self.logChan)
+		return diskSpaceResultMsg{availableGB: gb, err: err}
+	}
+}
+
+// createSwapCommand creates the swap file.
+func (self Model) createSwapCommand(sizeGB int) tea.Cmd {
+	return func() tea.Msg {
+		err := system.CreateSwapFile(sizeGB, self.logChan)
+		return swapCreateResultMsg{err: err}
+	}
 }
 
 // installRequiredPackages is a command that installs the required packages
@@ -141,7 +166,7 @@ func (self Model) startDNSValidation() tea.Cmd {
 
 		if cloudflareSuccessCount == 2 {
 			// Check registry
-			cloudflareRegistry := network.CheckCloudflareProxy("registry."+baseDomain, func(msg string) {
+			cloudflareRegistry := network.CheckCloudflareProxy("docker-registry."+baseDomain, func(msg string) {
 				self.logChan <- msg
 			})
 

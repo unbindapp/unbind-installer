@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,6 +23,9 @@ type Model struct {
 	osInfo                 *osinfo.OSInfo
 	err                    error
 	k3sUninstallScriptPath string
+	availableDiskSpaceGB   float64
+	swapSizeInput          textinput.Model
+	swapSizeInputErr       error
 
 	// UI components
 	spinner   spinner.Model
@@ -69,6 +75,23 @@ func NewModel() Model {
 	// Initialize domain input
 	domainInput := initializeDomainInput()
 
+	// Initialize swap input
+	swapInput := textinput.New()
+	swapInput.Placeholder = "e.g., 4"
+	swapInput.CharLimit = 4
+	swapInput.Width = 10
+	swapInput.Prompt = "Enter Swap Size (GB): "
+	swapInput.Validate = func(s string) error {
+		if s == "" {
+			return nil // Allow empty initially
+		}
+		_, err := strconv.Atoi(s)
+		if err != nil {
+			return fmt.Errorf("must be a number")
+		}
+		return nil
+	}
+
 	return Model{
 		state:              StateWelcome,
 		showDebugLogs:      false, // Initialize debug logs flag
@@ -89,7 +112,8 @@ func NewModel() Model {
 			Status:      "pending",
 			Description: "Initializing Cilium installation",
 		},
-		domainInput: domainInput,
+		domainInput:   domainInput,
+		swapSizeInput: swapInput,
 	}
 }
 
@@ -154,6 +178,16 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = self.updateLoadingState(msg)
 	case StateOSInfo:
 		model, cmd = self.updateOSInfoState(msg)
+	case StateCheckingSwap:
+		model, cmd = self.updateCheckingSwapState(msg)
+	case StateConfirmCreateSwap:
+		model, cmd = self.updateConfirmCreateSwapState(msg)
+	case StateEnterSwapSize:
+		model, cmd = self.updateEnterSwapSizeState(msg)
+	case StateCreatingSwap:
+		model, cmd = self.updateCreatingSwapState(msg)
+	case StateSwapCreated:
+		model, cmd = self.updateSwapCreatedState(msg)
 	case StateInstallingPackages:
 		model, cmd = self.updateInstallingPackagesState(msg)
 	case StateInstallComplete:
@@ -211,6 +245,16 @@ func (self Model) View() string {
 		return viewError(self)
 	case StateOSInfo:
 		return viewOSInfo(self)
+	case StateCheckingSwap:
+		return viewCheckingSwap(self)
+	case StateConfirmCreateSwap:
+		return viewConfirmCreateSwap(self)
+	case StateEnterSwapSize:
+		return viewEnterSwapSize(self)
+	case StateCreatingSwap:
+		return viewCreatingSwap(self)
+	case StateSwapCreated:
+		return viewSwapCreated(self)
 	case StateInstallingPackages:
 		return viewInstallingPackages(self)
 	case StateInstallComplete:

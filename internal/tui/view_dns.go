@@ -137,7 +137,7 @@ func viewDNSConfig(m Model) string {
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("3. Enter your domain below and press Enter to validate"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("If using Cloudflare, you should create another 'A' record for registry.yourdomain.com with proxy disabled (orange cloud off)"))
+	s.WriteString(m.styles.Subtle.Render("If using Cloudflare, you should create another 'A' record for docker-registry.yourdomain.com with proxy disabled (orange cloud off)"))
 	s.WriteString("\n\n")
 
 	// Domain input field
@@ -396,7 +396,7 @@ func viewDNSFailed(m Model) string {
 	if m.dnsInfo.RegistryIssue {
 		s.WriteString(m.styles.Bold.Render("! Registry DNS configuration issue detected"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("Please ensure that cloudflare proxy is disabled for registry.yourdomain.com"))
+		s.WriteString(m.styles.Normal.Render("Please ensure that cloudflare proxy is disabled for docker-registry.yourdomain.com"))
 		s.WriteString("\n\n")
 	} else {
 		// Failure details

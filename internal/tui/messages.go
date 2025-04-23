@@ -22,6 +22,21 @@ type osInfoMsg struct {
 	info *osinfo.OSInfo
 }
 
+// * Swap check messages
+type swapCheckResultMsg struct {
+	isEnabled bool
+	err       error
+}
+
+type diskSpaceResultMsg struct {
+	availableGB float64
+	err         error
+}
+
+type swapCreateResultMsg struct {
+	err error
+}
+
 // * Package manager messages
 type installPackagesMsg struct{}
 
