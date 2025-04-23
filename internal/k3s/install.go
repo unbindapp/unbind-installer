@@ -40,13 +40,11 @@ type Installer struct {
 		status    string
 		lastMsg   K3SUpdateMessage
 	}
-	externalIP string
 }
 
 // NewInstaller creates a new K3S Installer
-func NewInstaller(externalIP string, logChan chan<- string, updateChan chan<- K3SUpdateMessage) *Installer {
+func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage) *Installer {
 	inst := &Installer{
-		externalIP: externalIP,
 		LogChan:    logChan,
 		UpdateChan: updateChan,
 	}
@@ -106,7 +104,7 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 // Install installs K3S using a step-based approach with progress tracking
 // Returns kube config path if successful, or an error if it fails
 func (self *Installer) Install(ctx context.Context) (string, error) {
-	k3sInstallFlags := fmt.Sprintf("--disable=traefik --node-external-ip=%s --kubelet-arg=fail-swap-on=false", self.externalIP)
+	k3sInstallFlags := "--disable=traefik --kubelet-arg=fail-swap-on=false"
 
 	var kubeconfigPath string
 
