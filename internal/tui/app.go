@@ -279,12 +279,3 @@ func (self Model) View() string {
 		return viewWelcome(self)
 	}
 }
-
-// UpdateDomain updates the domain in the DNS info
-func (self *Model) UpdateDomain(domain string) {
-	if self.dnsInfo == nil {
-		self.dnsInfo = &dnsInfo{}
-	}
-	self.dnsInfo.Domain = domain
-	self.domainInput.SetValue(domain)
-}

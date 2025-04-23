@@ -39,6 +39,112 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 
 	return self.InstallDependencyWithSteps(ctx, dependencyName, []InstallationStep{
 		{
+			Description: "Installing Helm",
+			Progress:    0.02,
+			Action: func(ctx context.Context) error {
+				// Check if helm is already installed
+				cmd := exec.CommandContext(ctx, "helm", "version")
+				out, err := cmd.CombinedOutput()
+				if err == nil {
+					msg := fmt.Sprintf("Helm is already installed: %s", strings.TrimSpace(string(out)))
+					self.logProgress(dependencyName, 0.03, msg, nil, StatusInstalling)
+					return nil
+				}
+
+				self.logProgress(dependencyName, 0.02, "Helm not found, installing...", nil, StatusInstalling)
+
+				// Create temp directory for download
+				tempDir, err := os.MkdirTemp("", "helm-*")
+				if err != nil {
+					return fmt.Errorf("failed to create temp directory: %w", err)
+				}
+				defer os.RemoveAll(tempDir)
+
+				// Determine OS and architecture
+				goarch := runtime.GOARCH
+
+				// Map architecture to Helm naming convention
+				helmArch := goarch
+				if goarch == "amd64" {
+					helmArch = "amd64"
+				} else if goarch == "arm64" {
+					helmArch = "arm64"
+				}
+
+				version := "3.17.3"
+
+				// Construct the download URL for Helm
+				url := fmt.Sprintf("https://get.helm.sh/helm-v%s-%s-%s.tar.gz",
+					version, "linux", helmArch)
+
+				self.logProgress(dependencyName, 0.023, fmt.Sprintf("Downloading Helm from %s", url), nil, StatusInstalling)
+
+				// Download Helm
+				tarPath := filepath.Join(tempDir, "helm.tar.gz")
+				if err := self.downloadFileWithProgress(url, tarPath); err != nil {
+					return fmt.Errorf("failed to download helm: %w", err)
+				}
+
+				self.logProgress(dependencyName, 0.025, "Extracting Helm", nil, StatusInstalling)
+
+				// Extract the file
+				cmd = exec.CommandContext(ctx, "tar", "-xzf", tarPath, "-C", tempDir)
+				if out, err := cmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to extract helm: %w, output: %s", err, string(out))
+				}
+
+				// Find an appropriate bin directory
+				binPath := "/usr/local/bin"
+				self.logProgress(dependencyName, 0.027, "Checking installation directory", nil, StatusInstalling)
+
+				if !canWriteToDir(binPath) {
+					// Try user's local bin directory instead
+					home, err := os.UserHomeDir()
+					if err != nil {
+						return fmt.Errorf("failed to get home directory: %w", err)
+					}
+					binPath = filepath.Join(home, ".local", "bin")
+					if err := os.MkdirAll(binPath, 0755); err != nil {
+						return fmt.Errorf("failed to create bin directory: %w", err)
+					}
+
+					// Make sure the bin directory is in PATH
+					if !strings.Contains(os.Getenv("PATH"), binPath) {
+						self.sendLog(fmt.Sprintf("Note: Make sure to add %s to your PATH", binPath))
+					}
+				}
+
+				self.logProgress(dependencyName, 0.028, fmt.Sprintf("Installing Helm to %s", binPath), nil, StatusInstalling)
+
+				// The binary is in a subdirectory named after the OS-ARCH
+				sourcePath := filepath.Join(tempDir, fmt.Sprintf("%s-%s", "linux", helmArch), "helm")
+				destPath := filepath.Join(binPath, "helm")
+
+				input, err := os.ReadFile(sourcePath)
+				if err != nil {
+					return fmt.Errorf("failed to read helm binary: %w", err)
+				}
+
+				if err = os.WriteFile(destPath, input, 0755); err != nil {
+					return fmt.Errorf("failed to install helm: %w", err)
+				}
+
+				// Verify installation
+				cmd = exec.CommandContext(ctx, destPath, "version")
+				out, err = cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("helm installation verification failed: %w", err)
+				}
+
+				self.logProgress(dependencyName, 0.04, fmt.Sprintf("Helm successfully installed: %s", strings.TrimSpace(string(out))), nil, StatusInstalling)
+
+				// Set helm path for later use
+				os.Setenv("HELM_PATH", destPath)
+
+				return nil
+			},
+		},
+		{
 			Description: "Installing Helmfile",
 			Progress:    0.05,
 			Action: func(ctx context.Context) error {
@@ -205,6 +311,12 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					helmfilePath = "helmfile"
 				}
 
+				// Ensure HELM_PATH is in the environment if we installed it
+				if helmPath := os.Getenv("HELM_PATH"); helmPath != "" {
+					// Make helm executable available to helmfile by putting it in the PATH
+					os.Setenv("PATH", filepath.Dir(helmPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
+				}
+
 				// Construct arguments for helmfile command
 				args := []string{
 					"--file", filepath.Join(repoDir, "helmfile.yaml"),
@@ -332,8 +444,9 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					}
 				}
 
-				// Clear the environment variable we set
+				// Clear the environment variables we set
 				os.Unsetenv("HELMFILE_PATH")
+				os.Unsetenv("HELM_PATH")
 
 				return nil
 			},
