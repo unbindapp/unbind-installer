@@ -154,12 +154,12 @@ func (m Model) updateCheckingSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.isEnabled {
-			// Swap exists, skip creation flow
+			// Swap exists, skip creation flow and go to installing packages
 			m.state = StateInstallingPackages
 			m.isLoading = true
 			return m, tea.Batch(m.spinner.Tick, m.installRequiredPackages(), m.listenForLogs())
 		} else {
-			// No swap, ask user if they want to create it
+			// No swap, transition to confirm create swap state
 			m.state = StateConfirmCreateSwap
 			m.isLoading = true // Show spinner while getting disk space
 			return m, tea.Batch(m.spinner.Tick, m.getDiskSpaceCommand(), m.listenForLogs())

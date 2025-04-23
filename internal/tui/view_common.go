@@ -173,7 +173,7 @@ func viewOSInfo(m Model) string {
 func (m Model) updateOSInfoState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case installPackagesMsg:
-		m.state = StateInstallingPackages
+		m.state = StateCheckingSwap
 		m.isLoading = true
 		return m, tea.Batch(
 			m.spinner.Tick,
