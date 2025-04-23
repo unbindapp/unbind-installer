@@ -219,7 +219,7 @@ func dnsValidationTimeout(duration time.Duration) tea.Cmd {
 func (self Model) installK3S() tea.Cmd {
 	return func() tea.Msg {
 		// Create a new K3S installer
-		installer := k3s.NewInstaller(self.logChan, self.k3sProgressChan)
+		installer := k3s.NewInstaller(self.dnsInfo.ExternalIP, self.logChan, self.k3sProgressChan)
 
 		// Create a context with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
