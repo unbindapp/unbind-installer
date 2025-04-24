@@ -543,7 +543,7 @@ func (m Model) updateDNSFailedState(msg tea.Msg) (tea.Model, tea.Cmd) {
 // initializeDomainInput initializes the text input for domain entry
 func initializeDomainInput() textinput.Model {
 	ti := textinput.New()
-	ti.Placeholder = "example.com or *.example.com"
+	ti.Placeholder = "yourdomain.com"
 	ti.Focus()
 	ti.Width = 30
 	ti.Validate = func(s string) error {
