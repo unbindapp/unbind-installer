@@ -129,7 +129,7 @@ func viewDNSConfig(m Model) string {
 	s.WriteString(m.styles.Normal.Render("For Unbind to work properly, you need to configure DNS entries pointing to your external IP address."))
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Bold.Render("Option 1: Create a wildcard A record"))
+	s.WriteString(m.styles.Bold.Render("Option 1 (Recommended): Create a wildcard A record"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("1. Create an 'A' record for *.yourdomain.com → " + m.dnsInfo.ExternalIP))
 	s.WriteString("\n")
