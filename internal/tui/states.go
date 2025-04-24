@@ -33,10 +33,13 @@ const (
 
 // Additional model fields for DNS setup
 type dnsInfo struct {
+	Domain             string // The base domain or wildcard domain
+	UnbindDomain       string // unbind.yourdomain.com
+	RegistryDomain     string // unbind-registry.yourdomain.com
+	IsWildcard         bool   // Whether wildcard was specified
 	InternalIP         string
 	ExternalIP         string
 	CIDR               string
-	Domain             string
 	ValidationStarted  bool
 	ValidationSuccess  bool
 	CloudflareDetected bool

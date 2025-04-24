@@ -113,7 +113,7 @@ func viewDNSConfig(m Model) string {
 	s.WriteString("\n\n")
 
 	// Instructions
-	s.WriteString(m.styles.Bold.Render("Configure Wildcard DNS"))
+	s.WriteString(m.styles.Bold.Render("Configure DNS"))
 	s.WriteString("\n\n")
 
 	// Display detected IP addresses
@@ -126,18 +126,23 @@ func viewDNSConfig(m Model) string {
 	}
 
 	// DNS Configuration instructions
-	s.WriteString(m.styles.Normal.Render("For Unbind to work properly, you need to configure a wildcard DNS entry that points to your external IP address."))
+	s.WriteString(m.styles.Normal.Render("For Unbind to work properly, you need to configure DNS entries pointing to your external IP address."))
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Bold.Render("How to configure:"))
+	s.WriteString(m.styles.Bold.Render("Option 1: Create two A records"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("1. Register a domain or use a subdomain of a domain you own"))
+	s.WriteString(m.styles.Normal.Render("1. Create an 'A' record for unbind.yourdomain.com → " + m.dnsInfo.ExternalIP))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("2. Create an 'A' record for *.yourdomain.com pointing to your external IP"))
+	s.WriteString(m.styles.Normal.Render("2. Create an 'A' record for unbind-registry.yourdomain.com → " + m.dnsInfo.ExternalIP))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("3. Enter your domain below and press Enter to validate"))
+	s.WriteString(m.styles.Subtle.Render("   If using Cloudflare, unbind-registry must have proxy disabled (orange cloud off)"))
+	s.WriteString("\n\n")
+
+	s.WriteString(m.styles.Bold.Render("Option 2: Create a wildcard A record"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("If using Cloudflare, you should create another 'A' record for docker-registry.yourdomain.com with proxy disabled (orange cloud off)"))
+	s.WriteString(m.styles.Normal.Render("1. Create an 'A' record for *.yourdomain.com → " + m.dnsInfo.ExternalIP))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Subtle.Render("   If using Cloudflare, you still need a separate unbind-registry A record with proxy disabled"))
 	s.WriteString("\n\n")
 
 	// Domain input field
@@ -148,6 +153,8 @@ func viewDNSConfig(m Model) string {
 		Render(fmt.Sprintf("Domain: %s", m.domainInput.View()))
 
 	s.WriteString(domainInput)
+	s.WriteString("\n")
+	s.WriteString(m.styles.Subtle.Render("Enter your domain (e.g. yourdomain.com)"))
 	s.WriteString("\n\n")
 
 	// Continue button
@@ -176,6 +183,23 @@ func (m Model) updateDNSConfigState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// If Enter was pressed with a valid domain, start validation
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
 		if m.dnsInfo.Domain != "" {
+			// Parse the domain and determine if it's a wildcard
+			domain := m.dnsInfo.Domain
+			isWildcard := strings.HasPrefix(domain, "*.")
+
+			if isWildcard {
+				// Wildcard domain
+				baseDomain := strings.TrimPrefix(domain, "*.")
+				m.dnsInfo.IsWildcard = true
+				m.dnsInfo.UnbindDomain = "unbind." + baseDomain
+				m.dnsInfo.RegistryDomain = "unbind-registry." + baseDomain
+			} else {
+				// Regular domain - derive the subdomains
+				m.dnsInfo.IsWildcard = false
+				m.dnsInfo.UnbindDomain = "unbind." + domain
+				m.dnsInfo.RegistryDomain = "unbind-registry." + domain
+			}
+
 			m.state = StateDNSValidation
 			m.isLoading = true
 			m.dnsInfo.ValidationStarted = true
@@ -210,14 +234,21 @@ func viewDNSValidation(m Model) string {
 	// Show current action
 	s.WriteString(m.spinner.View())
 	s.WriteString(" ")
-	s.WriteString(m.styles.Bold.Render(fmt.Sprintf("Validating DNS configuration for %s...", m.dnsInfo.Domain)))
+	s.WriteString(m.styles.Bold.Render("Validating DNS configuration..."))
 	s.WriteString("\n\n")
 
 	// Display what we're testing
 	s.WriteString(m.styles.Bold.Render("Testing:"))
 	s.WriteString("\n")
-	s.WriteString(fmt.Sprintf("  • Domain: %s\n", m.styles.Normal.Render(m.dnsInfo.Domain)))
-	s.WriteString(fmt.Sprintf("  • Wildcard: %s\n", m.styles.Normal.Render("*."+m.dnsInfo.Domain)))
+
+	if m.dnsInfo.IsWildcard {
+		s.WriteString(fmt.Sprintf("  • Wildcard: %s\n", m.styles.Normal.Render(m.dnsInfo.Domain)))
+	} else {
+		s.WriteString(fmt.Sprintf("  • Domain: %s\n", m.styles.Normal.Render(m.dnsInfo.Domain)))
+	}
+
+	s.WriteString(fmt.Sprintf("  • Unbind: %s\n", m.styles.Normal.Render(m.dnsInfo.UnbindDomain)))
+	s.WriteString(fmt.Sprintf("  • Registry: %s\n", m.styles.Normal.Render(m.dnsInfo.RegistryDomain)))
 	s.WriteString(fmt.Sprintf("  • Expected IP: %s\n", m.styles.Key.Render(m.dnsInfo.ExternalIP)))
 	s.WriteString("\n")
 
@@ -321,16 +352,22 @@ func viewDNSSuccess(m Model) string {
 		s.WriteString(m.styles.Bold.Render("Cloudflare detected: "))
 		s.WriteString(m.styles.Success.Render("Yes"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("Your domain is configured with Cloudflare which works correctly with Unbind."))
+		if m.dnsInfo.IsWildcard {
+			s.WriteString(m.styles.Normal.Render("Your wildcard domain is configured correctly with Cloudflare."))
+		} else {
+			s.WriteString(m.styles.Normal.Render("Your domains are configured correctly with Cloudflare."))
+		}
 	} else {
-		baseDomain := strings.Replace(m.dnsInfo.Domain, "*.", "", 1)
-		wildcardDomain := "*." + baseDomain
-		s.WriteString(m.styles.Bold.Render("Domain: "))
-		s.WriteString(m.styles.Normal.Render(baseDomain))
+		s.WriteString(m.styles.Bold.Render("Configured domains:"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Bold.Render("Wildcard DNS: "))
-		s.WriteString(m.styles.Normal.Render("*." + wildcardDomain))
+		s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.UnbindDomain))
 		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.RegistryDomain))
+		s.WriteString("\n")
+		if m.dnsInfo.IsWildcard {
+			s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.Domain + " (wildcard)"))
+			s.WriteString("\n")
+		}
 		s.WriteString(m.styles.Bold.Render("Points to: "))
 		s.WriteString(m.styles.Normal.Render(m.dnsInfo.ExternalIP))
 	}
@@ -396,13 +433,20 @@ func viewDNSFailed(m Model) string {
 	if m.dnsInfo.RegistryIssue {
 		s.WriteString(m.styles.Bold.Render("! Registry DNS configuration issue detected"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("Please ensure that cloudflare proxy is disabled for docker-registry.yourdomain.com"))
+		s.WriteString(m.styles.Normal.Render("Please ensure that Cloudflare proxy is disabled for " + m.dnsInfo.RegistryDomain))
 		s.WriteString("\n\n")
 	} else {
 		// Failure details
-		s.WriteString(m.styles.Bold.Render("Domain: "))
-		s.WriteString(m.styles.Normal.Render(m.dnsInfo.Domain))
+		s.WriteString(m.styles.Bold.Render("Checked domains:"))
 		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.UnbindDomain))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.RegistryDomain))
+		s.WriteString("\n")
+		if m.dnsInfo.IsWildcard {
+			s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.Domain + " (wildcard)"))
+			s.WriteString("\n")
+		}
 		s.WriteString(m.styles.Bold.Render("Expected to point to: "))
 		s.WriteString(m.styles.Normal.Render(m.dnsInfo.ExternalIP))
 		s.WriteString("\n\n")
@@ -414,11 +458,17 @@ func viewDNSFailed(m Model) string {
 		// Troubleshooting tips
 		s.WriteString(m.styles.Bold.Render("Troubleshooting Tips:"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("1. Verify you created an 'A' record with a wildcard (*) subdomain"))
+		if m.dnsInfo.IsWildcard {
+			s.WriteString(m.styles.Normal.Render("1. Verify you created an 'A' record for " + m.dnsInfo.Domain))
+		} else {
+			s.WriteString(m.styles.Normal.Render("1. Verify you created 'A' records for both unbind and unbind-registry subdomains"))
+		}
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("2. Ensure the A record points to your external IP: " + m.dnsInfo.ExternalIP))
+		s.WriteString(m.styles.Normal.Render("2. Ensure all records point to your external IP: " + m.dnsInfo.ExternalIP))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("3. DNS changes can take time to propagate (sometimes up to 24-48 hours)"))
+		s.WriteString(m.styles.Normal.Render("3. If using Cloudflare, unbind-registry must have proxy disabled (orange cloud off)"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("4. DNS changes can take time to propagate (sometimes up to 24-48 hours)"))
 		s.WriteString("\n\n")
 	}
 
@@ -493,12 +543,21 @@ func (m Model) updateDNSFailedState(msg tea.Msg) (tea.Model, tea.Cmd) {
 // initializeDomainInput initializes the text input for domain entry
 func initializeDomainInput() textinput.Model {
 	ti := textinput.New()
-	ti.Placeholder = "*.yourdomain.com"
+	ti.Placeholder = "example.com or *.example.com"
 	ti.Focus()
 	ti.Width = 30
 	ti.Validate = func(s string) error {
-		baseDomain := strings.Replace(s, "*.", "", 1)
-		if !utils.IsDNSName(baseDomain) {
+		// Handle wildcard domain
+		if strings.HasPrefix(s, "*.") {
+			baseDomain := strings.TrimPrefix(s, "*.")
+			if !utils.IsDNSName(baseDomain) {
+				return fmt.Errorf("%s is not a valid domain", baseDomain)
+			}
+			return nil
+		}
+
+		// Handle regular domain
+		if !utils.IsDNSName(s) {
 			return fmt.Errorf("%s is not a valid domain", s)
 		}
 		return nil

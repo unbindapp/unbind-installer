@@ -121,12 +121,10 @@ func (self Model) startDetectingIPs() tea.Cmd {
 			self.dnsInfo = &dnsInfo{}
 		}
 
-		ipInfo, err := network.DetectIPs(func(msg string) {
-			self.logChan <- msg
-		})
+		ipInfo, err := network.DetectIPs(self.log)
 
 		if err != nil {
-			self.logChan <- "Error detecting IPs: " + err.Error()
+			self.log("Error detecting IPs: " + err.Error())
 			return errMsg{err: errdefs.ErrNetworkDetectionFailed}
 		}
 
@@ -134,78 +132,104 @@ func (self Model) startDetectingIPs() tea.Cmd {
 	}
 }
 
-// startDNSValidation starts the DNS validation process
+// startDNSValidation launches the DNS validation process.
+//
+// Validation rules:
+//  1. unbind.<baseDomain> must resolve (Cloudflare proxy allowed but not required).
+//  2. unbind-registry.<baseDomain> must resolve *without* being behind Cloudflare.
+//  3. If an arbitrary sub‑domain resolves, wildcard DNS is assumed and the wildcard flag is set.
 func (self Model) startDNSValidation() tea.Cmd {
 	return func() tea.Msg {
 		if self.dnsInfo == nil || self.dnsInfo.Domain == "" {
 			return errMsg{err: nil}
 		}
 
-		baseDomain := strings.Replace(self.dnsInfo.Domain, "*.", "", 1)
+		self.log("Starting DNS validation…")
 
-		testDomains := []string{
-			"unbind." + baseDomain,
-			"dex." + baseDomain,
-		}
+		base := strings.TrimPrefix(self.dnsInfo.Domain, "*.")
 
-		// Log the validation attempt
-		self.logChan <- "Starting DNS validation..."
+		/* -------------------------------------------------------------------- */
+		// 1. unbind.<baseDomain>
+		/* -------------------------------------------------------------------- */
+		unbindValid, unbindCF := self.validateDomain("unbind."+base, true)
 
-		// Check for Cloudflare first
-		cloudflareSuccessCount := 0
-		for _, domain := range testDomains {
-			cloudflare := network.CheckCloudflareProxy(domain, func(msg string) {
-				self.logChan <- msg
-			})
-
-			// If Cloudflare is detected, consider it successful
-			if cloudflare {
-				cloudflareSuccessCount++
+		/* -------------------------------------------------------------------- */
+		// 2. unbind-registry.<baseDomain> (CF proxy *not* allowed)
+		/* -------------------------------------------------------------------- */
+		registryValid, registryCF := self.validateDomain("unbind-registry."+base, false)
+		if registryCF {
+			self.log("ERROR: Registry domain must not be behind Cloudflare proxy")
+			return dnsValidationCompleteMsg{
+				success:       false,
+				cloudflare:    true,
+				registryIssue: true,
 			}
 		}
 
-		if cloudflareSuccessCount == 2 {
-			// Check registry
-			cloudflareRegistry := network.CheckCloudflareProxy("docker-registry."+baseDomain, func(msg string) {
-				self.logChan <- msg
-			})
+		/* -------------------------------------------------------------------- */
+		// 3. Wildcard detection via arbitrary sub‑domain
+		/* -------------------------------------------------------------------- */
+		wildcardValid, wildcardCF := self.detectWildcard(base)
+		if wildcardValid {
+			self.dnsInfo.IsWildcard = true
+		}
 
-			if cloudflareRegistry {
-				return dnsValidationCompleteMsg{
-					success:       false,
-					cloudflare:    true,
-					registryIssue: true,
-				}
-			}
-
+		/* -------------------------------------------------------------------- */
+		// Final decision matrix
+		/* -------------------------------------------------------------------- */
+		switch {
+		case wildcardValid && registryValid:
+			self.log("Wildcard domain detected and validated successfully")
 			return dnsValidationCompleteMsg{
 				success:    true,
-				cloudflare: true,
+				cloudflare: wildcardCF || unbindCF,
 			}
-		}
 
-		// Otherwise test the wildcard DNS configuration
-		successCount := 0
-		for _, domain := range testDomains {
-			success := network.ValidateDNS(domain, self.dnsInfo.ExternalIP, func(msg string) {
-				self.logChan <- msg
-			})
-			if success {
-				successCount++
-			}
-		}
-
-		if successCount == 2 {
+		case !wildcardValid && (unbindValid || unbindCF) && registryValid:
+			self.log("Individual A records validated successfully")
 			return dnsValidationCompleteMsg{
 				success:    true,
-				cloudflare: false,
+				cloudflare: unbindCF,
 			}
-		}
-		return dnsValidationCompleteMsg{
-			success:    false,
-			cloudflare: false,
+
+		default:
+			self.log("DNS validation failed")
+			return dnsValidationCompleteMsg{
+				success:    false,
+				cloudflare: unbindCF || registryCF || wildcardCF,
+			}
 		}
 	}
+}
+
+// validateDomain checks whether the domain resolves to the expected IP and whether it is
+// behind Cloudflare. If allowCloudflare is false and the domain *is* behind Cloudflare,
+// the domain is considered invalid.
+func (self Model) validateDomain(domain string, allowCloudflare bool) (dnsValid, behindCF bool) {
+	self.log(fmt.Sprintf("Checking %s…", domain))
+
+	behindCF = network.CheckCloudflareProxy(domain, self.log)
+	if behindCF && !allowCloudflare {
+		return false, true
+	}
+
+	dnsValid = network.ValidateDNS(domain, self.dnsInfo.ExternalIP, self.log)
+	return dnsValid, behindCF
+}
+
+// detectWildcard probes an arbitrary sub‑domain to infer wildcard DNS configuration.
+// If the probe domain is behind Cloudflare the presence of wildcard is assumed true.
+func (self Model) detectWildcard(base string) (dnsValid, behindCF bool) {
+	probe := fmt.Sprintf("test%d.%s", time.Now().Unix(), base)
+	self.log(fmt.Sprintf("Checking for wildcard domain with %s…", probe))
+
+	behindCF = network.CheckCloudflareProxy(probe, self.log)
+	if behindCF {
+		return true, true // wildcard via Cloudflare
+	}
+
+	dnsValid = network.ValidateDNS(probe, self.dnsInfo.ExternalIP, self.log)
+	return dnsValid, behindCF
 }
 
 // dnsValidationTimeout creates a timeout for DNS validation
@@ -228,21 +252,21 @@ func (self Model) installK3S() tea.Cmd {
 		// Install K3S
 		kubeConfig, err := installer.Install(ctx)
 		if err != nil {
-			self.logChan <- fmt.Sprintf("K3S installation failed: %s", err.Error())
+			self.log(fmt.Sprintf("K3S installation failed: %s", err.Error()))
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}
 		}
 
 		// Create a new K8s client
 		client, err := k3s.NewK8sClient(kubeConfig)
 		if err != nil {
-			self.logChan <- fmt.Sprintf("K8s client creation failed: %s", err.Error())
+			self.log(fmt.Sprintf("K8s client creation failed: %s", err.Error()))
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K8s client creation failed: %s", err.Error()))}
 		}
 
 		// create dependencies manager
 		dm, err := unbindInstaller.NewUnbindInstaller(kubeConfig, self.logChan, self.unbindProgressChan)
 		if err != nil {
-			self.logChan <- fmt.Sprintf("Dependencies manager creation failed: %s", err.Error())
+			self.log(fmt.Sprintf("Dependencies manager creation failed: %s", err.Error()))
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("Dependencies manager creation failed: %s", err.Error()))}
 		}
 
@@ -261,15 +285,24 @@ func (self Model) installUnbind() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 
-		// Install K3S
-		err := self.unbindInstaller.SyncHelmfileWithSteps(ctx, unbindInstaller.SyncHelmfileOptions{
-			BaseDomain: self.dnsInfo.Domain,
-		})
+		// Install Unbind
+		opts := unbindInstaller.SyncHelmfileOptions{
+			UnbindDomain:         self.dnsInfo.UnbindDomain,
+			UnbindRegistryDomain: self.dnsInfo.RegistryDomain,
+		}
+		if self.dnsInfo.IsWildcard {
+			opts.BaseDomain = self.dnsInfo.Domain
+		}
+		err := self.unbindInstaller.SyncHelmfileWithSteps(ctx, opts)
 		if err != nil {
-			self.logChan <- fmt.Sprintf("Unbind installation failed: %s", err.Error())
+			self.log(fmt.Sprintf("Unbind installation failed: %s", err.Error()))
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeUnbindInstallFailed, fmt.Sprintf("Unbind installation failed: %s", err.Error()))}
 		}
 
 		return unbindInstallCompleteMsg{}
 	}
+}
+
+func (self Model) log(msg string) {
+	self.logChan <- msg
 }

@@ -16,9 +16,11 @@ import (
 
 // SyncHelmfileOptions defines options for the Helmfile sync operation
 type SyncHelmfileOptions struct {
-	BaseDomain       string
-	AdditionalValues map[string]interface{}
-	RepoURL          string
+	BaseDomain           string
+	UnbindDomain         string
+	UnbindRegistryDomain string
+	AdditionalValues     map[string]interface{}
+	RepoURL              string
 }
 
 // SyncHelmfileWithSteps performs a helmfile sync operation using the unbind-charts repository
@@ -391,7 +393,9 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Construct arguments for helmfile command
 				args := []string{
 					"--file", filepath.Join(repoDir, "helmfile.yaml"),
-					"--state-values-set", "baseDomain=" + opts.BaseDomain,
+					"--state-values-set", "unbindDomain=" + opts.UnbindDomain,
+					"--state-values-set", "unbindRegistryDomain=" + opts.UnbindRegistryDomain,
+					"--state-values-set", "wildcardBaseDomain=" + opts.BaseDomain,
 				}
 
 				// Add any additional values if present
@@ -402,7 +406,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Add final "sync" command
 				args = append(args, "sync")
 
-				self.logProgress(dependencyName, 0.31, fmt.Sprintf("Starting helmfile sync with baseDomain=%s", opts.BaseDomain), nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.31, fmt.Sprintf("Starting installation with %s", strings.Join(args, "|")), nil, StatusInstalling)
 
 				// Set up the command to run helmfile sync
 				cmd := exec.CommandContext(ctx, helmfilePath, args...)
