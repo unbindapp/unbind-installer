@@ -13,6 +13,7 @@ type AppTheme struct {
 	Text       string // Default text color
 	Subtle     string // Subtle text color
 	Error      string // Error color
+	Warning    string // Warning color
 	Success    string // Success color
 	Background string // Background color
 	Surface    string // Surface color for UI elements
@@ -27,6 +28,7 @@ func DefaultTheme() AppTheme {
 		Text:       "#ffffff", // White text
 		Subtle:     "#888888", // Gray text
 		Error:      "#ff0000", // Red
+		Warning:    "#ffff00", // Yellow
 		Success:    "#00ff00", // Bright green
 		Background: "#121212", // Dark background
 		Surface:    "#242424", // Slightly lighter surface
@@ -54,6 +56,9 @@ func NewStyles(theme AppTheme) Styles {
 
 		Error: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.Error)),
+
+		Warning: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Warning)),
 
 		StatusBar: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#000000")).
@@ -85,6 +90,7 @@ type Styles struct {
 	Normal          lipgloss.Style
 	Bold            lipgloss.Style
 	Subtle          lipgloss.Style
+	Warning         lipgloss.Style
 	Error           lipgloss.Style
 	StatusBar       lipgloss.Style
 	Key             lipgloss.Style
