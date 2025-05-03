@@ -3,8 +3,12 @@ package k3s
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -274,6 +278,251 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 			},
 		},
 		{
+			Description: "Installing Helm and dependencies",
+			Progress:    0.70,
+			Action: func(ctx context.Context) error {
+				// Check if helm is already installed
+				cmd := exec.CommandContext(ctx, "helm", "version")
+				out, err := cmd.CombinedOutput()
+				if err == nil {
+					msg := fmt.Sprintf("Helm is already installed: %s", strings.TrimSpace(string(out)))
+					self.log(msg)
+					return nil
+				}
+
+				self.log("Helm not found, installing...")
+
+				// Create temp directory for download
+				tempDir, err := os.MkdirTemp("", "helm-*")
+				if err != nil {
+					return fmt.Errorf("failed to create temp directory: %w", err)
+				}
+				defer os.RemoveAll(tempDir)
+
+				// Determine OS and architecture
+				goarch := runtime.GOARCH
+
+				// Map architecture to Helm naming convention
+				helmArch := goarch
+				if goarch == "amd64" {
+					helmArch = "amd64"
+				} else if goarch == "arm64" {
+					helmArch = "arm64"
+				}
+
+				version := "3.17.3"
+
+				// Construct the download URL for Helm
+				url := fmt.Sprintf("https://get.helm.sh/helm-v%s-%s-%s.tar.gz",
+					version, "linux", helmArch)
+
+				self.log(fmt.Sprintf("Downloading Helm from %s", url))
+
+				// Download Helm
+				tarPath := filepath.Join(tempDir, "helm.tar.gz")
+				if err := self.downloadFile(url, tarPath); err != nil {
+					return fmt.Errorf("failed to download helm: %w", err)
+				}
+
+				self.log("Extracting Helm")
+
+				// Extract the file
+				cmd = exec.CommandContext(ctx, "tar", "-xzf", tarPath, "-C", tempDir)
+				if out, err := cmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to extract helm: %w, output: %s", err, string(out))
+				}
+
+				// Find an appropriate bin directory
+				binPath := "/usr/local/bin"
+				self.log("Checking installation directory")
+
+				if !canWriteToDir(binPath) {
+					// Try user's local bin directory instead
+					home, err := os.UserHomeDir()
+					if err != nil {
+						return fmt.Errorf("failed to get home directory: %w", err)
+					}
+					binPath = filepath.Join(home, ".local", "bin")
+					if err := os.MkdirAll(binPath, 0755); err != nil {
+						return fmt.Errorf("failed to create bin directory: %w", err)
+					}
+
+					// Make sure the bin directory is in PATH
+					if !strings.Contains(os.Getenv("PATH"), binPath) {
+						self.log(fmt.Sprintf("Note: Make sure to add %s to your PATH", binPath))
+					}
+				}
+
+				self.log(fmt.Sprintf("Installing Helm to %s", binPath))
+
+				// The binary is in a subdirectory named after the OS-ARCH
+				sourcePath := filepath.Join(tempDir, fmt.Sprintf("%s-%s", "linux", helmArch), "helm")
+				destPath := filepath.Join(binPath, "helm")
+
+				input, err := os.ReadFile(sourcePath)
+				if err != nil {
+					return fmt.Errorf("failed to read helm binary: %w", err)
+				}
+
+				if err = os.WriteFile(destPath, input, 0755); err != nil {
+					return fmt.Errorf("failed to install helm: %w", err)
+				}
+
+				// Verify installation
+				cmd = exec.CommandContext(ctx, destPath, "version")
+				out, err = cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("helm installation verification failed: %w", err)
+				}
+
+				self.log(fmt.Sprintf("Helm successfully installed: %s", strings.TrimSpace(string(out))))
+
+				// Set helm path for later use
+				os.Setenv("HELM_PATH", destPath)
+
+				// Install Helm diff plugin
+				self.log("Installing Helm diff plugin...")
+				cmd = exec.CommandContext(ctx, destPath, "plugin", "install", "https://github.com/databus23/helm-diff")
+				if out, err := cmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to install helm diff plugin: %w, output: %s", err, string(out))
+				}
+
+				// Verify diff plugin installation
+				cmd = exec.CommandContext(ctx, destPath, "plugin", "list")
+				out, err = cmd.CombinedOutput()
+				if err != nil || !strings.Contains(string(out), "diff") {
+					return fmt.Errorf("helm diff plugin installation verification failed: %w", err)
+				}
+
+				self.log("Helm diff plugin successfully installed")
+
+				// Install Helmfile
+				self.log("Installing Helmfile...")
+				tempDir, err = os.MkdirTemp("", "helmfile-*")
+				if err != nil {
+					return fmt.Errorf("failed to create temp directory: %w", err)
+				}
+				defer os.RemoveAll(tempDir)
+
+				version = "0.171.0"
+				url = fmt.Sprintf("https://github.com/helmfile/helmfile/releases/download/v%s/helmfile_%s_%s_%s.tar.gz",
+					version, version, "linux", helmArch)
+
+				self.log(fmt.Sprintf("Downloading Helmfile from %s", url))
+
+				// Download helmfile
+				tarPath = filepath.Join(tempDir, "helmfile.tar.gz")
+				if err := self.downloadFile(url, tarPath); err != nil {
+					return fmt.Errorf("failed to download helmfile: %w", err)
+				}
+
+				self.log("Extracting Helmfile")
+
+				// Extract the file
+				cmd = exec.CommandContext(ctx, "tar", "-xzf", tarPath, "-C", tempDir)
+				if out, err := cmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to extract helmfile: %w, output: %s", err, string(out))
+				}
+
+				// Install helmfile binary
+				sourcePath = filepath.Join(tempDir, "helmfile")
+				destPath = filepath.Join(binPath, "helmfile")
+
+				input, err = os.ReadFile(sourcePath)
+				if err != nil {
+					return fmt.Errorf("failed to read helmfile binary: %w", err)
+				}
+
+				if err = os.WriteFile(destPath, input, 0755); err != nil {
+					return fmt.Errorf("failed to install helmfile: %w", err)
+				}
+
+				// Verify helmfile installation
+				cmd = exec.CommandContext(ctx, destPath, "--version")
+				out, err = cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("helmfile installation verification failed: %w", err)
+				}
+
+				self.log(fmt.Sprintf("Helmfile successfully installed: %s", strings.TrimSpace(string(out))))
+
+				// Set helmfile path for later use
+				os.Setenv("HELMFILE_PATH", destPath)
+
+				return nil
+			},
+		},
+		{
+			Description: "Installing Longhorn storage system",
+			Progress:    0.80,
+			Action: func(ctx context.Context) error {
+				// Add Longhorn Helm repo
+				self.log("Adding Longhorn Helm repository...")
+				repoCmd := exec.CommandContext(ctx, "helm", "repo", "add", "longhorn", "https://charts.longhorn.io")
+				if output, err := repoCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to add Longhorn Helm repo: %w, output: %s", err, string(output))
+				}
+
+				// Update Helm repos
+				self.log("Updating Helm repositories...")
+				updateCmd := exec.CommandContext(ctx, "helm", "repo", "update")
+				if output, err := updateCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to update Helm repos: %w, output: %s", err, string(output))
+				}
+
+				// Remove default annotation from existing StorageClasses
+				self.log("Removing default annotation from existing StorageClasses...")
+				patchCmd := exec.CommandContext(ctx, "kubectl", "patch", "storageclass", "--type=json", "-p",
+					`[{"op": "replace", "path": "/metadata/annotations/storageclass.kubernetes.io~1is-default-class", "value": "false"}]`,
+					"--selector=storageclass.kubernetes.io/is-default-class=true")
+				if output, err := patchCmd.CombinedOutput(); err != nil {
+					self.log(fmt.Sprintf("Warning: Failed to remove default annotation from StorageClasses: %s", string(output)))
+				}
+
+				// Install Longhorn
+				self.log("Installing Longhorn...")
+				installCmd := exec.CommandContext(ctx, "helm", "install", "longhorn", "longhorn/longhorn",
+					"--namespace", "longhorn-system",
+					"--create-namespace",
+					"--version", "1.8.1",
+					"--set", "defaultSettings.replicaSoftAntiAffinity=false",
+					"--set", "defaultSettings.replicaAutoBalance=disabled",
+					"--set", "defaultSettings.upgradeChecker=false",
+					"--set", "defaultSettings.autoSalvage=true",
+					"--set", "defaultSettings.disableRevisionCounter=true",
+					"--set", "defaultSettings.storageOverProvisioningPercentage=100",
+					"--set", "defaultSettings.storageMinimalAvailablePercentage=0",
+					"--set", "defaultSettings.concurrentReplicaRebuildPerNodeLimit=0",
+					"--set", "defaultSettings.concurrentVolumeBackupRestorePerNodeLimit=0",
+					"--set", "defaultSettings.concurrentAutomaticEngineUpgradePerNodeLimit=0",
+					"--set", "defaultSettings.guaranteedInstanceManagerCPU=0",
+					"--set", "defaultSettings.kubernetesClusterAutoscalerEnabled=false",
+					"--set", "defaultSettings.autoCleanupSystemGeneratedSnapshot=true",
+					"--set", "defaultSettings.disableSchedulingOnCordonedNode=true",
+					"--set", "defaultSettings.fastReplicaRebuildEnabled=false",
+					"--set", "csi.attacherReplicaCount=1",
+					"--set", "csi.provisionerReplicaCount=1",
+					"--set", "csi.resizerReplicaCount=1",
+					"--set", "csi.snapshotterReplicaCount=1",
+					"--set", "longhornUI.replicas=1",
+					"--set", "persistence.reclaimPolicy=Retain",
+					"--set", "persistence.defaultClass=true")
+
+				if output, err := installCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to install Longhorn: %w, output: %s", err, string(output))
+				}
+
+				// Wait for Longhorn to be ready
+				self.log("Waiting for Longhorn to be ready...")
+				waitCmd := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition=ready", "pod", "-l", "app=longhorn-manager", "-n", "longhorn-system", "--timeout=300s")
+				if output, err := waitCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed waiting for Longhorn to be ready: %w, output: %s", err, string(output))
+				}
+
+				return nil
+			},
+		},
+		{
 			Description: "Waiting for kubeconfig to be created",
 			Progress:    0.75,
 			Action: func(ctx context.Context) error {
@@ -329,6 +578,14 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 						return fmt.Errorf("K3S installed but not functioning correctly: %w", serviceError)
 					}
 				}
+				return nil
+			},
+		},
+		{
+			Description: "Finalizing installation",
+			Progress:    0.95,
+			Action: func(ctx context.Context) error {
+				// ... existing code ...
 				return nil
 			},
 		},
@@ -413,4 +670,40 @@ func (self *Installer) collectServiceDiagnostics() error {
 
 	// If we got here and the service is active, it's probably fine
 	return nil
+}
+
+// Helper function to download a file
+func (self *Installer) downloadFile(url, filepath string) error {
+	// Create the file
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	// Copy the data
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+// Helper function to check if we can write to a directory
+func canWriteToDir(dir string) bool {
+	testFile := filepath.Join(dir, ".helm_write_test")
+	err := os.WriteFile(testFile, []byte("test"), 0644)
+	if err != nil {
+		return false
+	}
+	os.Remove(testFile)
+	return true
 }
