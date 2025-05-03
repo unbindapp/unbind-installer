@@ -122,6 +122,30 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 	// Define the installation steps
 	steps := []InstallationStep{
 		{
+			Description: "Setting system file limits",
+			Progress:    0.05,
+			Action: func(ctx context.Context) error {
+				// Set system-wide limits
+				self.log("Setting system file limits...")
+
+				// Set system-wide limits via sysctl
+				sysctlContent := `fs.file-max = 65535
+fs.inotify.max_user_watches = 2099999999
+fs.inotify.max_user_instances = 2099999999`
+
+				if err := os.WriteFile("/etc/sysctl.d/99-k3s-file-limits.conf", []byte(sysctlContent), 0644); err != nil {
+					self.log(fmt.Sprintf("Warning: Could not write sysctl config: %v", err))
+				}
+				// Apply sysctl settings
+				cmd := exec.CommandContext(ctx, "sysctl", "--system")
+				if output, err := cmd.CombinedOutput(); err != nil {
+					self.log(fmt.Sprintf("Warning: Could not apply sysctl settings: %v, output: %s", err, string(output)))
+				}
+
+				return nil
+			},
+		},
+		{
 			Description: "Downloading K3S installation script",
 			Progress:    0.10,
 			Action: func(ctx context.Context) error {
