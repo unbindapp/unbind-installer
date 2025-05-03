@@ -24,7 +24,7 @@ func viewCheckingSwap(m Model) string {
 	}
 	s.WriteString(m.styles.Bold.Render("Checking swap configuration..."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
 	return s.String()
 }
 
@@ -40,7 +40,7 @@ func viewConfirmCreateSwap(m Model) string {
 		s.WriteString(" ")
 		s.WriteString(m.styles.Bold.Render("Checking disk space..."))
 		s.WriteString("\n\n")
-		s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
+		s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
 		return s.String()
 	}
 
@@ -69,7 +69,7 @@ func viewConfirmCreateSwap(m Model) string {
 	s.WriteString(buttonRow)
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Subtle.Render("Press 'y' to configure swap, 'n' to skip, or 'ctrl+c' to quit."))
+	s.WriteString(m.styles.Subtle.Render("Press 'y' to configure swap, 'n' to skip, or 'q' to quit."))
 
 	return s.String()
 }
@@ -101,7 +101,7 @@ func viewEnterSwapSize(m Model) string {
 		s.WriteString("\n\n")
 	}
 
-	s.WriteString(m.styles.Subtle.Render("Press Enter to confirm, or 'ctrl+c' to quit."))
+	s.WriteString(m.styles.Subtle.Render("Press Enter to confirm, or 'q' to quit."))
 
 	return s.String()
 }
@@ -122,7 +122,7 @@ func viewCreatingSwap(m Model) string {
 	s.WriteString("\n")
 	s.WriteString(m.styles.Subtle.Render("Check console output for 'dd' progress if applicable."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to attempt to quit (may leave partial files)."))
+	s.WriteString(m.styles.Subtle.Render("Press 'q' to attempt to quit (may leave partial files)."))
 	return s.String()
 }
 
@@ -138,7 +138,7 @@ func viewSwapCreated(m Model) string {
 	s.WriteString("\n\n")
 	s.WriteString(m.styles.Subtle.Render("Continuing installation automatically in a few seconds..."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press Enter to continue immediately, or 'ctrl+c' to quit."))
+	s.WriteString(m.styles.Subtle.Render("Press Enter to continue immediately, or 'q' to quit."))
 
 	return s.String()
 }
@@ -181,7 +181,7 @@ func (m Model) updateCheckingSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "q":
 			return m, tea.Quit
 		}
 	}
@@ -213,7 +213,7 @@ func (m Model) updateConfirmCreateSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = StateInstallingPackages
 			m.isLoading = true
 			return m, tea.Batch(m.spinner.Tick, m.installRequiredPackages(), m.listenForLogs())
-		case "ctrl+c", "q", "esc":
+		case "q":
 			return m, tea.Quit
 		}
 	case spinner.TickMsg:
@@ -259,7 +259,7 @@ func (m Model) updateEnterSwapSizeState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.spinner.Tick, m.createSwapCommand(sizeGB), m.listenForLogs())
 			return m, tea.Batch(cmds...)
 
-		case "ctrl+c", "q", "esc":
+		case "q":
 			return m, tea.Quit
 		}
 	}
@@ -300,7 +300,7 @@ func (m Model) updateCreatingSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "q":
 			return m, tea.Quit
 		}
 	}
@@ -320,7 +320,7 @@ func (m Model) updateSwapCreatedState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "enter":
 			return advance()
-		case "ctrl+c", "q", "esc":
+		case "q":
 			return m, tea.Quit
 		}
 	case autoAdvanceMsg:

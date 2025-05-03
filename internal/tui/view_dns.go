@@ -164,7 +164,7 @@ func viewDNSConfig(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
 
 	return s.String()
 }
@@ -284,7 +284,7 @@ func viewDNSValidation(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
 
 	return s.String()
 }
@@ -489,7 +489,7 @@ func viewDNSFailed(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'ctrl+c' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
 
 	return s.String()
 }

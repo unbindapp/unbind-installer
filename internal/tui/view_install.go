@@ -200,7 +200,7 @@ func viewInstallationComplete(m Model) string {
 	// Additional information
 	s.WriteString(m.styles.Normal.Render("Your Unbind instance is now ready to use."))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to exit."))
+	s.WriteString(m.styles.Subtle.Render("Press 'q' to exit."))
 
 	return s.String()
 }

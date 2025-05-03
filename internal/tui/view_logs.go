@@ -22,7 +22,7 @@ func viewDebugLogs(m Model) string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'd' to return, 'ctrl+c' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press 'd' to return, 'q' to quit"))
 	return s.String()
 }
 

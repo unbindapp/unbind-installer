@@ -22,7 +22,7 @@ func viewLoading(m Model) string {
 	s.WriteString(" ")
 	s.WriteString(m.styles.Normal.Render("Detecting OS information..."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
 
 	return s.String()
 }
@@ -112,7 +112,7 @@ func viewError(m Model) string {
 	}
 
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
 
 	return s.String()
 }

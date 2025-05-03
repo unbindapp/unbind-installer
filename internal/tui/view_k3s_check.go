@@ -25,7 +25,7 @@ func viewCheckK3s(m Model) string {
 	s.WriteString("\n\n")
 
 	// Footer / Quit message
-	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
 
 	return s.String()
 }
@@ -62,7 +62,7 @@ func viewConfirmUninstallK3s(m Model) string {
 	s.WriteString("\n\n")
 
 	// Instructions / Footer
-	s.WriteString(m.styles.Subtle.Render("Press 'y' to uninstall and continue, or 'n'/'q'/'esc'/'ctrl+c' to quit."))
+	s.WriteString(m.styles.Subtle.Render("Press 'y' to uninstall and continue, or 'n'/'q' to quit."))
 
 	return s.String()
 }
@@ -83,7 +83,7 @@ func viewUninstallingK3s(m Model) string {
 	s.WriteString("\n\n")
 
 	// Footer / Quit message
-	s.WriteString(m.styles.Subtle.Render("Uninstall process started. Pressing 'ctrl+c' will attempt to quit, but the script might continue running in the background."))
+	s.WriteString(m.styles.Subtle.Render("Uninstall process started. Pressing 'ctrl+c' will attempt to quit, but the uninstall may continue in the background."))
 
 	return s.String()
 }
@@ -126,7 +126,7 @@ func (m Model) updateCheckK3sState(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg: // Handle quit keys during check
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "q":
 			return m, tea.Quit
 		}
 	}
@@ -152,7 +152,7 @@ func (m Model) updateConfirmUninstallK3sState(msg tea.Msg) (tea.Model, tea.Cmd) 
 				m.uninstallK3sCommand(m.k3sUninstallScriptPath), // Start uninstall
 				m.listenForLogs(),
 			)
-		case "n", "ctrl+c", "q", "esc":
+		case "n", "q":
 			// User wants to quit
 			return m, tea.Quit
 		}
@@ -191,7 +191,7 @@ func (m Model) updateUninstallingK3sState(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg: // Handle quit keys during uninstall
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "q":
 			return m, tea.Quit
 		}
 	}
