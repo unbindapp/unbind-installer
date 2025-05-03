@@ -453,6 +453,34 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 			},
 		},
 		{
+			Description: "Waiting for kubeconfig to be created",
+			Progress:    0.75,
+			Action: func(ctx context.Context) error {
+				kubeconfigPath = "/etc/rancher/k3s/k3s.yaml"
+
+				maxKubeRetries := 6
+				for retry := 0; retry < maxKubeRetries; retry++ {
+					time.Sleep(5 * time.Second)
+
+					self.log(fmt.Sprintf("Checking for kubeconfig (attempt %d/%d)...", retry+1, maxKubeRetries))
+					if _, err := os.Stat(kubeconfigPath); err == nil {
+						self.log("Kubeconfig file found")
+						return nil
+					}
+
+					if retry == maxKubeRetries-1 {
+						errMsg := "Kubeconfig file not created after multiple attempts"
+						self.log(errMsg)
+
+						serviceError := self.collectServiceDiagnostics()
+
+						return fmt.Errorf("K3S installed but kubeconfig not created: %w", serviceError)
+					}
+				}
+				return nil
+			},
+		},
+		{
 			Description: "Installing Longhorn storage system",
 			Progress:    0.80,
 			Action: func(ctx context.Context) error {
@@ -508,6 +536,9 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 					"--set", "persistence.reclaimPolicy=Retain",
 					"--set", "persistence.defaultClass=true")
 
+				// Set KUBECONFIG environment variable
+				installCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
+
 				if output, err := installCmd.CombinedOutput(); err != nil {
 					return fmt.Errorf("failed to install Longhorn: %w, output: %s", err, string(output))
 				}
@@ -515,38 +546,11 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 				// Wait for Longhorn to be ready
 				self.log("Waiting for Longhorn to be ready...")
 				waitCmd := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition=ready", "pod", "-l", "app=longhorn-manager", "-n", "longhorn-system", "--timeout=300s")
+				waitCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 				if output, err := waitCmd.CombinedOutput(); err != nil {
 					return fmt.Errorf("failed waiting for Longhorn to be ready: %w, output: %s", err, string(output))
 				}
 
-				return nil
-			},
-		},
-		{
-			Description: "Waiting for kubeconfig to be created",
-			Progress:    0.75,
-			Action: func(ctx context.Context) error {
-				kubeconfigPath = "/etc/rancher/k3s/k3s.yaml"
-
-				maxKubeRetries := 6
-				for retry := 0; retry < maxKubeRetries; retry++ {
-					time.Sleep(5 * time.Second)
-
-					self.log(fmt.Sprintf("Checking for kubeconfig (attempt %d/%d)...", retry+1, maxKubeRetries))
-					if _, err := os.Stat(kubeconfigPath); err == nil {
-						self.log("Kubeconfig file found")
-						return nil
-					}
-
-					if retry == maxKubeRetries-1 {
-						errMsg := "Kubeconfig file not created after multiple attempts"
-						self.log(errMsg)
-
-						serviceError := self.collectServiceDiagnostics()
-
-						return fmt.Errorf("K3S installed but kubeconfig not created: %w", serviceError)
-					}
-				}
 				return nil
 			},
 		},
