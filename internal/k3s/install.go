@@ -551,6 +551,15 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 					return fmt.Errorf("failed waiting for Longhorn to be ready: %w, output: %s", err, string(output))
 				}
 
+				// Remove default annotation from local-path storage class
+				self.log("Removing default annotation from local-path storage class...")
+				patchCmd = exec.CommandContext(ctx, "kubectl", "patch", "storageclass", "local-path", "--type=json", "-p",
+					`[{"op": "replace", "path": "/metadata/annotations/storageclass.kubernetes.io~1is-default-class", "value": "false"}]`)
+				patchCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
+				if output, err := patchCmd.CombinedOutput(); err != nil {
+					self.log(fmt.Sprintf("Warning: Failed to remove default annotation from local-path storage class: %s", string(output)))
+				}
+
 				return nil
 			},
 		},
