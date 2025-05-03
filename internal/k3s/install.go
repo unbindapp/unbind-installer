@@ -622,7 +622,34 @@ fs.inotify.max_user_instances = 2099999999`
 			Description: "Finalizing installation",
 			Progress:    0.95,
 			Action: func(ctx context.Context) error {
-				// ... existing code ...
+				// Add KUBECONFIG to ~/.profile
+				self.log("Adding KUBECONFIG to ~/.profile...")
+
+				// Read existing .profile content
+				profilePath := filepath.Join(os.Getenv("HOME"), ".profile")
+				profileContent, err := os.ReadFile(profilePath)
+				if err != nil && !os.IsNotExist(err) {
+					return fmt.Errorf("failed to read .profile: %w", err)
+				}
+
+				// Check if KUBECONFIG is already set
+				kubeconfigLine := fmt.Sprintf("\nexport KUBECONFIG=%s\n", kubeconfigPath)
+				if !strings.Contains(string(profileContent), kubeconfigLine) {
+					// Append KUBECONFIG export if it doesn't exist
+					f, err := os.OpenFile(profilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					if err != nil {
+						return fmt.Errorf("failed to open .profile: %w", err)
+					}
+					defer f.Close()
+
+					if _, err := f.WriteString(kubeconfigLine); err != nil {
+						return fmt.Errorf("failed to write to .profile: %w", err)
+					}
+					self.log("KUBECONFIG environment variable added to ~/.profile")
+				} else {
+					self.log("KUBECONFIG environment variable already exists in ~/.profile")
+				}
+
 				return nil
 			},
 		},
