@@ -202,6 +202,8 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = self.updateInstallingK3SState(msg)
 	case StateInstallingUnbind:
 		model, cmd = self.updateInstallingUnbindState(msg)
+	case StateInstallationComplete:
+		model, cmd = self.updateInstallationCompleteState(msg)
 	default:
 		return self, self.listenForLogs()
 	}
@@ -265,6 +267,8 @@ func (self Model) View() string {
 		return viewInstallingK3S(self)
 	case StateInstallingUnbind:
 		return viewInstallingUnbind(self)
+	case StateInstallationComplete:
+		return viewInstallationComplete(self)
 	default:
 		return viewWelcome(self)
 	}

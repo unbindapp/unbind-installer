@@ -165,3 +165,46 @@ func (m Model) updateInstallCompleteState(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	return m, m.listenForLogs()
 }
+
+// viewInstallationComplete shows the final installation complete screen
+func viewInstallationComplete(m Model) string {
+	s := strings.Builder{}
+
+	// Banner
+	s.WriteString(getBanner())
+	s.WriteString("\n\n")
+
+	// Success message
+	s.WriteString(m.styles.Success.Render("✓ Unbind Installation Complete!"))
+	s.WriteString("\n\n")
+
+	// Domain information
+	if m.dnsInfo != nil {
+		s.WriteString(m.styles.Bold.Render("Visit your Unbind instance to complete setup:"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render(fmt.Sprintf("https://%s", m.dnsInfo.UnbindDomain)))
+		s.WriteString("\n\n")
+	}
+
+	// Additional information
+	s.WriteString(m.styles.Normal.Render("Your Unbind instance is now ready to use."))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Subtle.Render("Press 'ctrl+c' to exit."))
+
+	return s.String()
+}
+
+// updateInstallationCompleteState handles updates in the installation complete state
+func (m Model) updateInstallationCompleteState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			return m, tea.Quit
+		}
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+	}
+	return m, m.listenForLogs()
+}

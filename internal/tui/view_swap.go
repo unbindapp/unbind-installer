@@ -48,7 +48,7 @@ func viewConfirmCreateSwap(m Model) string {
 	s.WriteString("\n\n")
 	s.WriteString(m.styles.Normal.Render("No active swap space detected."))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("It's recommended to configure swap, especially on systems with limited RAM."))
+	s.WriteString(m.styles.Normal.Render("Swap is virtual memory that uses disk space when RAM is full. While not recommended for container workloads (as it can impact performance and container isolation), it can help prevent out-of-memory crashes on resource-constrained systems."))
 	s.WriteString("\n\n")
 
 	// Show available disk space if known
@@ -84,7 +84,7 @@ func viewEnterSwapSize(m Model) string {
 	s.WriteString("\n\n")
 	s.WriteString(m.styles.Normal.Render("Enter the desired size for the swap file in Gigabytes (GB)."))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("A common recommendation is equal to RAM size, or double RAM for hibernation."))
+	s.WriteString(m.styles.Normal.Render("The available disk space will be reduced by the swap size."))
 	s.WriteString("\n\n")
 
 	if m.availableDiskSpaceGB > 0 {

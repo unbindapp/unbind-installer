@@ -179,14 +179,10 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.listenForLogs(), m.listenForUnbindProgress())
 
 	case unbindInstallCompleteMsg:
-		// ! Move to next state after Unbind is installed
-		m.state = StateInstallingUnbind
-		m.isLoading = true
-		// return m, tea.Batch(
-		// 	m.spinner.Tick,
-		// 	m.installDependencies(),
-		// 	m.listenForLogs(),
-		// )
+		// Move to installation complete state
+		m.state = StateInstallationComplete
+		m.isLoading = false
+		return m, m.listenForLogs()
 
 	case errMsg:
 		m.err = msg.err

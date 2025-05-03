@@ -29,6 +29,7 @@ const (
 	StateDNSFailed
 	StateInstallingK3S
 	StateInstallingUnbind
+	StateInstallationComplete
 )
 
 // Additional model fields for DNS setup
