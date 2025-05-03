@@ -186,6 +186,17 @@ func viewInstallationComplete(m Model) string {
 		s.WriteString("\n\n")
 	}
 
+	// Management options
+	s.WriteString(m.styles.Bold.Render("Management Options:"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("A management script has been installed at /usr/local/bin/unbind-manage"))
+	s.WriteString("\n\n")
+	s.WriteString(m.styles.Normal.Render("Available commands:"))
+	s.WriteString("\n")
+	s.WriteString(fmt.Sprintf("  %s %s\n", m.styles.Key.Render("•"), m.styles.Normal.Render("unbind-manage uninstall - Uninstall Unbind (WARNING: This will permanently delete all data)")))
+	s.WriteString(fmt.Sprintf("  %s %s\n", m.styles.Key.Render("•"), m.styles.Normal.Render("unbind-manage add-node - Show instructions for adding a new node")))
+	s.WriteString("\n")
+
 	// Additional information
 	s.WriteString(m.styles.Normal.Render("Your Unbind instance is now ready to use."))
 	s.WriteString("\n")

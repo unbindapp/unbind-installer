@@ -179,6 +179,11 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.listenForLogs(), m.listenForUnbindProgress())
 
 	case unbindInstallCompleteMsg:
+		// Install management script with cluster IP
+		if err := installer.InstallManagementScript(m.dnsInfo.InternalIP); err != nil {
+			m.logMessages = append(m.logMessages, fmt.Sprintf("Warning: Failed to install management script: %v", err))
+		}
+
 		// Move to installation complete state
 		m.state = StateInstallationComplete
 		m.isLoading = false
