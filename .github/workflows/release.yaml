@@ -19,6 +19,11 @@ jobs:
         with:
           go-version-file: ./go.mod
 
+      - name: Install UPX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx
+
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -35,7 +40,8 @@ jobs:
           CGO_ENABLED: 0
           GOARCH: ${{ matrix.arch }}
         run: |
-          cd cmd && go build -ldflags "-s -w -X main.Version=${GITHUB_REF#refs/tags/}" -o ../unbind-installer-${{ matrix.arch }} && cd ..
+          cd cmd && go build -trimpath -ldflags "-s -w -X main.Version=${GITHUB_REF#refs/tags/} -H=windowsgui -buildid=" -o ../unbind-installer-${{ matrix.arch }} && cd ..
+          upx --best --lzma unbind-installer-${{ matrix.arch }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
