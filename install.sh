@@ -48,31 +48,40 @@ echo -e "${GREEN}Installing Unbind Installer version $LATEST_VERSION for $ARCH..
 
 # Download and install
 TEMP_DIR=$(mktemp -d)
-INSTALLER_PATH="$TEMP_DIR/unbind-installer"
-CHECKSUM_PATH="$TEMP_DIR/checksum.sha256"
+cd "$TEMP_DIR"
 
 # Download the gzipped binary and its checksum
 echo -e "${GREEN}Downloading installer...${NC}"
-curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz" -o "$INSTALLER_PATH.gz"
-curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz.sha256" -o "$CHECKSUM_PATH"
+curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz" -o "installer.gz"
+curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz.sha256" -o "expected.sha256"
 
-# Verify checksum
+# Get the expected checksum
+EXPECTED_CHECKSUM=$(cat expected.sha256 | awk '{print $1}')
+
+# Calculate actual checksum
 echo -e "${GREEN}Verifying checksum...${NC}"
-if ! (cd "$TEMP_DIR" && sha256sum -c checksum.sha256); then
+ACTUAL_CHECKSUM=$(sha256sum installer.gz | awk '{print $1}')
+
+# Compare checksums
+if [ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]; then
     echo -e "${RED}Error: Checksum verification failed${NC}"
+    echo "Expected: $EXPECTED_CHECKSUM"
+    echo "Got:      $ACTUAL_CHECKSUM"
     echo "The downloaded file may be corrupted or tampered with"
+    cd - > /dev/null
     rm -rf "$TEMP_DIR"
     exit 1
 fi
 
 # Decompress the binary
 echo -e "${GREEN}Decompressing installer...${NC}"
-gunzip "$INSTALLER_PATH.gz"
-chmod +x "$INSTALLER_PATH"
+gunzip installer.gz
+chmod +x installer
 
 # Execute the installer
 echo -e "${GREEN}Running installer...${NC}"
-"$INSTALLER_PATH"
+./installer
 
 # Cleanup
+cd - > /dev/null
 rm -rf "$TEMP_DIR" 
