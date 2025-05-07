@@ -41,7 +41,9 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           cd cmd && go build -trimpath -ldflags "-s -w -X main.Version=${GITHUB_REF#refs/tags/} -H=windowsgui -buildid=" -o ../unbind-installer-${{ matrix.arch }} && cd ..
-          upx --best --lzma unbind-installer-${{ matrix.arch }}
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            upx --best --lzma unbind-installer-${{ matrix.arch }}
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
