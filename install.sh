@@ -49,15 +49,29 @@ echo -e "${GREEN}Installing Unbind Installer version $LATEST_VERSION for $ARCH..
 # Download and install
 TEMP_DIR=$(mktemp -d)
 INSTALLER_PATH="$TEMP_DIR/unbind-installer"
+CHECKSUM_PATH="$TEMP_DIR/checksum.sha256"
 
-# Download the gzipped binary
+# Download the gzipped binary and its checksum
+echo -e "${GREEN}Downloading installer...${NC}"
 curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz" -o "$INSTALLER_PATH.gz"
+curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz.sha256" -o "$CHECKSUM_PATH"
+
+# Verify checksum
+echo -e "${GREEN}Verifying checksum...${NC}"
+if ! (cd "$TEMP_DIR" && sha256sum -c checksum.sha256); then
+    echo -e "${RED}Error: Checksum verification failed${NC}"
+    echo "The downloaded file may be corrupted or tampered with"
+    rm -rf "$TEMP_DIR"
+    exit 1
+fi
 
 # Decompress the binary
+echo -e "${GREEN}Decompressing installer...${NC}"
 gunzip "$INSTALLER_PATH.gz"
 chmod +x "$INSTALLER_PATH"
 
 # Execute the installer
+echo -e "${GREEN}Running installer...${NC}"
 "$INSTALLER_PATH"
 
 # Cleanup

@@ -37,13 +37,16 @@ jobs:
         run: |
           cd cmd && go build -trimpath -ldflags "-s -w -X main.Version=${GITHUB_REF#refs/tags/} -H=windowsgui -buildid=" -o ../unbind-installer-${{ matrix.arch }} && cd ..
           gzip -9 -k unbind-installer-${{ matrix.arch }}
+          sha256sum unbind-installer-${{ matrix.arch }}.gz > unbind-installer-${{ matrix.arch }}.gz.sha256
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             unbind-installer-amd64.gz
+            unbind-installer-amd64.gz.sha256
             unbind-installer-arm64.gz
+            unbind-installer-arm64.gz.sha256
           body: |
             ## Unbind Installer Release
 
@@ -54,7 +57,7 @@ jobs:
             ### Installation
 
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/unbindapp/unbind-installer/main/install.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/unbindapp/unbind-installer/main/install.sh | sudo bash
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
