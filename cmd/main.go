@@ -8,9 +8,11 @@ import (
 	"github.com/unbindapp/unbind-installer/internal/tui"
 )
 
+var Version = "dev"
+
 func main() {
 	// Initialize the Bubble Tea model
-	model := tui.NewModel()
+	model := tui.NewModel(Version)
 
 	// Run the TUI
 	p := tea.NewProgram(model, tea.WithAltScreen())

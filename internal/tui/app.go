@@ -57,7 +57,7 @@ type Model struct {
 }
 
 // NewModel initializes a new Model
-func NewModel() Model {
+func NewModel(version string) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 

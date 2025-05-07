@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./go.mod
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build
+        env:
+          CGO_ENABLED: 0
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          go build -ldflags "-s -w -X main.Version=${GITHUB_REF#refs/tags/}" -o unbind-installer-${{ matrix.arch }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            unbind-installer-amd64
+            unbind-installer-arm64
+          body: |
+            ## Unbind Installer Release
+
+            This release includes binaries for:
+            - Linux AMD64
+            - Linux ARM64
+
+            ### Installation
+
+            ```bash
+            # For AMD64
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/unbind-installer-amd64 -o unbind-installer
+            chmod +x unbind-installer
+            ./unbind-installer
+
+            # For ARM64
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/unbind-installer-arm64 -o unbind-installer
+            chmod +x unbind-installer
+            ./unbind-installer
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
