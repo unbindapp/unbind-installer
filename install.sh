@@ -48,7 +48,7 @@ printf "%bInstalling Unbind Installer version %s for %s...%b\n" "$GREEN" "$LATES
 
 # Download and install
 TEMP_DIR=$(mktemp -d)
-cd "$TEMP_DIR"
+cd "$TEMP_DIR" || exit 1
 
 # Download the gzipped binary and its checksum
 printf "%bDownloading installer...%b\n" "$GREEN" "$NC"
