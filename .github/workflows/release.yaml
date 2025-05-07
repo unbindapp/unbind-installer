@@ -47,7 +47,7 @@ jobs:
             ### Installation
 
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/unbindapp/unbind-installer/main/install.sh | sudo bash
+            curl -fsSL https://raw.githubusercontent.com/unbindapp/unbind-installer/main/install.sh | sh
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

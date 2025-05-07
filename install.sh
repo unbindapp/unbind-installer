@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 set -e
 
@@ -9,20 +9,20 @@ NC='\033[0m' # No Color
 
 # Check for root privileges
 if [ "$(id -u)" != "0" ]; then
-   echo -e "${RED}Error: This script must be run as root${NC}"
-   echo "Please run with sudo or as root user"
+   printf "%bError: This script must be run as root%b\n" "$RED" "$NC"
+   printf "Please run with sudo or as root user\n"
    exit 1
 fi
 
 # Check if running on Linux
-if [[ "$(uname)" != "Linux" ]]; then
-    echo -e "${RED}Error: This installer only supports Linux systems${NC}"
+if [ "$(uname)" != "Linux" ]; then
+    printf "%bError: This installer only supports Linux systems%b\n" "$RED" "$NC"
     exit 1
 fi
 
 # Detect architecture
 ARCH=$(uname -m)
-case $ARCH in
+case "$ARCH" in
     x86_64)
         ARCH="amd64"
         ;;
@@ -30,8 +30,8 @@ case $ARCH in
         ARCH="arm64"
         ;;
     *)
-        echo -e "${RED}Error: Unsupported architecture: $ARCH${NC}"
-        echo "This installer only supports x86_64 (amd64) and aarch64 (arm64) architectures"
+        printf "%bError: Unsupported architecture: %s%b\n" "$RED" "$ARCH" "$NC"
+        printf "This installer only supports x86_64 (amd64) and aarch64 (arm64) architectures\n"
         exit 1
         ;;
 esac
@@ -40,18 +40,18 @@ esac
 LATEST_VERSION=$(curl -s https://api.github.com/repos/unbindapp/unbind-installer/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
 if [ -z "$LATEST_VERSION" ]; then
-    echo -e "${RED}Error: Could not fetch latest version${NC}"
+    printf "%bError: Could not fetch latest version%b\n" "$RED" "$NC"
     exit 1
 fi
 
-echo -e "${GREEN}Installing Unbind Installer version $LATEST_VERSION for $ARCH...${NC}"
+printf "%bInstalling Unbind Installer version %s for %s...%b\n" "$GREEN" "$LATEST_VERSION" "$ARCH" "$NC"
 
 # Download and install
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
 
 # Download the gzipped binary and its checksum
-echo -e "${GREEN}Downloading installer...${NC}"
+printf "%bDownloading installer...%b\n" "$GREEN" "$NC"
 curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz" -o "installer.gz"
 curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz.sha256" -o "expected.sha256"
 
@@ -59,27 +59,27 @@ curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST
 EXPECTED_CHECKSUM=$(cat expected.sha256 | awk '{print $1}')
 
 # Calculate actual checksum
-echo -e "${GREEN}Verifying checksum...${NC}"
+printf "%bVerifying checksum...%b\n" "$GREEN" "$NC"
 ACTUAL_CHECKSUM=$(sha256sum installer.gz | awk '{print $1}')
 
 # Compare checksums
 if [ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]; then
-    echo -e "${RED}Error: Checksum verification failed${NC}"
-    echo "Expected: $EXPECTED_CHECKSUM"
-    echo "Got:      $ACTUAL_CHECKSUM"
-    echo "The downloaded file may be corrupted or tampered with"
+    printf "%bError: Checksum verification failed%b\n" "$RED" "$NC"
+    printf "Expected: %s\n" "$EXPECTED_CHECKSUM"
+    printf "Got:      %s\n" "$ACTUAL_CHECKSUM"
+    printf "The downloaded file may be corrupted or tampered with\n"
     cd - > /dev/null
     rm -rf "$TEMP_DIR"
     exit 1
 fi
 
 # Decompress the binary
-echo -e "${GREEN}Decompressing installer...${NC}"
+printf "%bDecompressing installer...%b\n" "$GREEN" "$NC"
 gunzip installer.gz
 chmod +x installer
 
 # Execute the installer
-echo -e "${GREEN}Running installer...${NC}"
+printf "%bRunning installer...%b\n" "$GREEN" "$NC"
 ./installer
 
 # Cleanup
