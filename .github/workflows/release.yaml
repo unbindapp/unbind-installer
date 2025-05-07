@@ -19,11 +19,6 @@ jobs:
         with:
           go-version-file: ./go.mod
 
-      - name: Install UPX
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y upx
-
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -41,16 +36,14 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           cd cmd && go build -trimpath -ldflags "-s -w -X main.Version=${GITHUB_REF#refs/tags/} -H=windowsgui -buildid=" -o ../unbind-installer-${{ matrix.arch }} && cd ..
-          if [ "${{ matrix.arch }}" = "amd64" ]; then
-            upx --best --lzma unbind-installer-${{ matrix.arch }}
-          fi
+          gzip -9 -k unbind-installer-${{ matrix.arch }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            unbind-installer-amd64
-            unbind-installer-arm64
+            unbind-installer-amd64.gz
+            unbind-installer-arm64.gz
           body: |
             ## Unbind Installer Release
 
@@ -61,15 +54,7 @@ jobs:
             ### Installation
 
             ```bash
-            # For AMD64
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/unbind-installer-amd64 -o unbind-installer
-            chmod +x unbind-installer
-            ./unbind-installer
-
-            # For ARM64
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/unbind-installer-arm64 -o unbind-installer
-            chmod +x unbind-installer
-            ./unbind-installer
+            curl -fsSL https://raw.githubusercontent.com/unbindapp/unbind-installer/main/install.sh | bash
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

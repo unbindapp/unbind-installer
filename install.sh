@@ -7,6 +7,13 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
+# Check for root privileges
+if [ "$(id -u)" != "0" ]; then
+   echo -e "${RED}Error: This script must be run as root${NC}"
+   echo "Please run with sudo or as root user"
+   exit 1
+fi
+
 # Check if running on Linux
 if [[ "$(uname)" != "Linux" ]]; then
     echo -e "${RED}Error: This installer only supports Linux systems${NC}"
@@ -43,7 +50,11 @@ echo -e "${GREEN}Installing Unbind Installer version $LATEST_VERSION for $ARCH..
 TEMP_DIR=$(mktemp -d)
 INSTALLER_PATH="$TEMP_DIR/unbind-installer"
 
-curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH" -o "$INSTALLER_PATH"
+# Download the gzipped binary
+curl -L "https://github.com/unbindapp/unbind-installer/releases/download/$LATEST_VERSION/unbind-installer-$ARCH.gz" -o "$INSTALLER_PATH.gz"
+
+# Decompress the binary
+gunzip "$INSTALLER_PATH.gz"
 chmod +x "$INSTALLER_PATH"
 
 # Execute the installer
