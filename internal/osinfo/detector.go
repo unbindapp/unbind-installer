@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"slices"
+	"strings"
 
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
 )
@@ -11,12 +12,35 @@ import (
 // SupportedDistros is a list of supported Linux distributions
 var AllSupportedDistros = []string{
 	"ubuntu",
+	"debian",
+	"fedora",
+	"opensuse",
+	"centos",
 }
 
 var AllSupportedDistrosVersions = map[string][]string{
 	"ubuntu": {
 		"22.04",
 		"24.04",
+		"24.10",
+		"25.04",
+	},
+	"debian": {
+		"11",
+		"12",
+		"13",
+	},
+	"fedora": {
+		"40",
+		"41",
+		"42",
+	},
+	"opensuse": {
+		"15",
+	},
+	"centos": {
+		"9",
+		"10",
 	},
 }
 
@@ -40,6 +64,23 @@ var getArchFunc = getGoarch
 
 func getGoarch() string {
 	return runtime.GOARCH
+}
+
+// IsVersionSupported checks if a version is supported for a given distribution
+func IsVersionSupported(distribution, version string) bool {
+	versions, ok := AllSupportedDistrosVersions[distribution]
+	if !ok {
+		return false
+	}
+
+	// Special handling for OpenSUSE 15+
+	if distribution == "opensuse" {
+		// Extract major version number
+		majorVersion := strings.Split(version, ".")[0]
+		return majorVersion >= "15"
+	}
+
+	return slices.Contains(versions, version)
 }
 
 // GetOSInfo detects the current OS and returns information about it
@@ -68,11 +109,7 @@ func GetOSInfo() (*OSInfo, error) {
 	}
 
 	// Check if the detected version is supported
-	if versions, ok := AllSupportedDistrosVersions[info.Distribution]; ok {
-		if !slices.Contains(versions, info.VersionID) {
-			return nil, errdefs.NewCustomError(errdefs.ErrTypeUnsupportedVersion, fmt.Sprintf("Unsupported version: %s", info.VersionID))
-		}
-	} else {
+	if !IsVersionSupported(info.Distribution, info.VersionID) {
 		return nil, errdefs.NewCustomError(errdefs.ErrTypeUnsupportedVersion, fmt.Sprintf("Unsupported version: %s", info.VersionID))
 	}
 

@@ -92,8 +92,8 @@ func (self Model) createSwapCommand(sizeGB int) tea.Cmd {
 // installRequiredPackages is a command that installs the required packages
 func (self Model) installRequiredPackages() tea.Cmd {
 	return func() tea.Msg {
-		// Packages to install
-		packages := []string{
+		// Common package names that we need
+		commonPackages := []string{
 			"curl",
 			"wget",
 			"ca-certificates",
@@ -101,11 +101,17 @@ func (self Model) installRequiredPackages() tea.Cmd {
 			"apache2-utils",
 		}
 
-		// Create a new apt installer
-		installer := pkgmanager.NewAptInstaller(self.logChan)
+		// Get distribution-specific package names
+		packages := pkgmanager.GetDistributionPackages(self.osInfo.Distribution, commonPackages)
+
+		// Create a new package manager
+		installer, err := pkgmanager.NewPackageManager(self.osInfo.Distribution, self.logChan)
+		if err != nil {
+			return errMsg{err}
+		}
 
 		// Install the packages
-		err := installer.InstallPackages(packages)
+		err = installer.InstallPackages(packages)
 		if err != nil {
 			return errMsg{err}
 		}
