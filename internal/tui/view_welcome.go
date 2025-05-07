@@ -32,9 +32,8 @@ func viewWelcome(m Model) string {
 	s.WriteString("\n")
 
 	reqList := []string{
-		"Ubuntu 22.04 or 24.04",
 		"Port 80 and 443 accessible, if using a firewall",
-		"A wildcard DNS entry pointing to the server IP (I will guide you through this!)",
+		"A domain pointing to the server IP (I will guide you through this later!)",
 	}
 
 	for _, req := range reqList {
