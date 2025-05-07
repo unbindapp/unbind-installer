@@ -31,10 +31,11 @@ jobs:
 
       - name: Build
         env:
+          GOOS: linux
           CGO_ENABLED: 0
           GOARCH: ${{ matrix.arch }}
         run: |
-          go build -ldflags "-s -w -X main.Version=${GITHUB_REF#refs/tags/}" -o unbind-installer-${{ matrix.arch }}
+          cd cmd && go build -ldflags "-s -w -X main.Version=${GITHUB_REF#refs/tags/}" -o ../unbind-installer-${{ matrix.arch }} && cd ..
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
