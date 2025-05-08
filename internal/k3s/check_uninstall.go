@@ -121,12 +121,12 @@ cleanup:
 	time.Sleep(10 * time.Second)
 
 	// 1. Log out of any leftover iSCSI sessions
-	err = runCommand(logChan, "iscsiadm", "-m", "session", "|", "awk", "'/rancher.longhorn/ {print $2}'", "|", "xargs", "-r", "-I{}", "iscsiadm", "-m", "session", "-r", "{}", "-u")
+	err = runCommand(logChan, "iscsiadm", "-m", "session", "|", "grep", "'io.longhorn'", "|", "awk", "'{print $2}'", "|", "sed", "'s/\\[\\([0-9]*\\)\\]/\\1/'", "|", "xargs", "-r", "-I{}", "iscsiadm", "-m", "session", "-u", "-r", "{}")
 	if err != nil {
 		logChan <- "Warning: Failed to logout of iSCSI sessions, continuing anyway"
 	}
 
-	err = runCommand(logChan, "iscsiadm", "-m", "node", "--targetname", "iqn.2014-09.io.rancher.longhorn*", "-o", "delete")
+	err = runCommand(logChan, "iscsiadm", "-m", "node", "--targetname", "iqn.*.longhorn*", "-o", "delete")
 	if err != nil {
 		logChan <- "Warning: Failed to delete iSCSI nodes, continuing anyway"
 	}

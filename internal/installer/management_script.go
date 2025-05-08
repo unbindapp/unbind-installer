@@ -107,8 +107,8 @@ handle_uninstall() {
         /usr/local/bin/k3s-uninstall.sh
         # Remove longhorn
         # 1. Log out of any leftover iSCSI sessions Longhorn created
-        iscsiadm -m session | awk '/rancher.longhorn/ {print $2}' | xargs -r -I{} iscsiadm -m session -r {} -u || true
-        iscsiadm -m node --targetname iqn.2014-09.io.rancher.longhorn* -o delete || true
+        iscsiadm -m session | grep 'io.longhorn' | awk '{print $2}' | sed 's/\[\([0-9]*\)\]/\1/' | xargs -r -I{} iscsiadm -m session -u -r {}
+        iscsiadm -m node --targetname iqn.*.longhorn* -o delete || true
 
         # 2. Remove any device-mapper entries that still reference Longhorn
         for dev in $(sudo dmsetup ls 2>/dev/null | grep longhorn | awk '{print $1}'); do
