@@ -100,11 +100,23 @@ func Uninstall(uninstallScriptPath string, logChan chan<- string) error {
 	}
 
 	// Wait for uninstall job with timeout
-	err = runCommand(logChan, "kubectl", "-n", "longhorn-system", "wait", "--for=condition=complete", "--timeout=300s", "job/longhorn-uninstall")
-	if err != nil {
-		logChan <- "Warning: Longhorn uninstall job timed out or failed, continuing anyway"
+	timeout := time.After(300 * time.Second)
+	tick := time.Tick(5 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			logChan <- "Warning: Longhorn uninstall job timed out, continuing anyway"
+			goto cleanup
+		case <-tick:
+			cmd := exec.Command("kubectl", "-n", "longhorn-system", "get", "job", "longhorn-uninstall", "-o", "jsonpath={.status.conditions[?(@.type=='Complete')].status}")
+			output, err := cmd.Output()
+			if err == nil && strings.TrimSpace(string(output)) == "True" {
+				logChan <- "Longhorn uninstall job completed successfully"
+				goto cleanup
+			}
+		}
 	}
-
+cleanup:
 	// Give Longhorn time to uninstall
 	time.Sleep(10 * time.Second)
 
