@@ -87,6 +87,11 @@ handle_uninstall() {
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo -e "${YELLOW}Uninstalling Unbind...${NC}"
         /usr/local/bin/k3s-uninstall.sh
+        # Remove longhorn
+        if [ -d "/var/lib/longhorn" ]; then
+            echo -e "${YELLOW}Removing Longhorn...${NC}"
+            rm -rf /var/lib/longhorn
+        fi
         print_banner
         print_box "Unbind has been uninstalled successfully." "$GREEN"
     else
