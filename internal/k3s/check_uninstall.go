@@ -99,10 +99,10 @@ func Uninstall(uninstallScriptPath string, logChan chan<- string) error {
 		logChan <- "Warning: Failed to create Longhorn uninstall job, continuing anyway"
 	}
 
-	// Wait for uninstall job
-	err = runCommand(logChan, "kubectl", "-n", "longhorn-system", "get", "job/longhorn-uninstall", "-w")
+	// Wait for uninstall job with timeout
+	err = runCommand(logChan, "kubectl", "-n", "longhorn-system", "wait", "--for=condition=complete", "--timeout=300s", "job/longhorn-uninstall")
 	if err != nil {
-		logChan <- "Warning: Failed to wait for Longhorn uninstall job, continuing anyway"
+		logChan <- "Warning: Longhorn uninstall job timed out or failed, continuing anyway"
 	}
 
 	// Give Longhorn time to uninstall

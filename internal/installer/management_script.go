@@ -89,7 +89,7 @@ handle_uninstall() {
         export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
         kubectl -n longhorn-system patch settings.longhorn.io deleting-confirmation-flag -p '{"value":"true"}' --type=merge || true
         kubectl create -f https://raw.githubusercontent.com/longhorn/longhorn/v1.8.1/uninstall/uninstall.yaml || true
-        kubectl -n longhorn-system get job/longhorn-uninstall -w || true
+        kubectl -n longhorn-system wait --for=condition=complete --timeout=300s job/longhorn-uninstall || true
         /usr/local/bin/k3s-uninstall.sh
         # Remove longhorn
         # 1. Log out of any leftover iSCSI sessions Longhorn created
