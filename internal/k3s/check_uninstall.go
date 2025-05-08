@@ -87,6 +87,12 @@ func Uninstall(uninstallScriptPath string, logChan chan<- string) error {
 	// Set KUBECONFIG for kubectl commands
 	os.Setenv("KUBECONFIG", "/etc/rancher/k3s/k3s.yaml")
 
+	// Set flag to allow uninstall
+	err = runCommand(logChan, "kubectl", "patch", "-n", "longhorn-system", "settings.longhorn.io", "deleting-confirmation-flag", "-p", `{"value":"true"}`, "--type=merge")
+	if err != nil {
+		logChan <- "Warning: Failed to set Longhorn deleting-confirmation-flag, continuing anyway"
+	}
+
 	// Create Longhorn uninstall job
 	err = runCommand(logChan, "kubectl", "create", "-f", "https://raw.githubusercontent.com/longhorn/longhorn/v1.8.1/uninstall/uninstall.yaml")
 	if err != nil {
