@@ -1,11 +1,13 @@
 package k3s
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
 )
@@ -71,6 +73,7 @@ func runCommand(logChan chan<- string, command string, args ...string) error {
 
 // Uninstall executes the K3s uninstall script.
 func Uninstall(uninstallScriptPath string, logChan chan<- string) error {
+	var err error
 	if os.Geteuid() != 0 {
 		return errdefs.ErrNotRoot // Ensure we run as root
 	}
@@ -78,14 +81,102 @@ func Uninstall(uninstallScriptPath string, logChan chan<- string) error {
 		return fmt.Errorf("k3s uninstall script not found at %s", uninstallScriptPath)
 	}
 
+	// Longhorn uninstall process
+	logChan <- "Starting Longhorn uninstall process..."
+
+	// Set KUBECONFIG for kubectl commands
+	os.Setenv("KUBECONFIG", "/etc/rancher/k3s/k3s.yaml")
+
+	// Create Longhorn uninstall job
+	err = runCommand(logChan, "kubectl", "create", "-f", "https://raw.githubusercontent.com/longhorn/longhorn/v1.8.1/uninstall/uninstall.yaml")
+	if err != nil {
+		logChan <- "Warning: Failed to create Longhorn uninstall job, continuing anyway"
+	}
+
+	// Wait for uninstall job
+	err = runCommand(logChan, "kubectl", "-n", "longhorn-system", "get", "job/longhorn-uninstall", "-w")
+	if err != nil {
+		logChan <- "Warning: Failed to wait for Longhorn uninstall job, continuing anyway"
+	}
+
+	// Give Longhorn time to uninstall
+	time.Sleep(10 * time.Second)
+
+	// 1. Log out of any leftover iSCSI sessions
+	err = runCommand(logChan, "iscsiadm", "-m", "session", "|", "awk", "'/rancher.longhorn/ {print $2}'", "|", "xargs", "-r", "-I{}", "iscsiadm", "-m", "session", "-r", "{}", "-u")
+	if err != nil {
+		logChan <- "Warning: Failed to logout of iSCSI sessions, continuing anyway"
+	}
+
+	err = runCommand(logChan, "iscsiadm", "-m", "node", "--targetname", "iqn.2014-09.io.rancher.longhorn*", "-o", "delete")
+	if err != nil {
+		logChan <- "Warning: Failed to delete iSCSI nodes, continuing anyway"
+	}
+
+	// 2. Remove device-mapper entries
+	cmd := exec.Command("dmsetup", "ls")
+	output, err := cmd.Output()
+	if err == nil {
+		scanner := bufio.NewScanner(bytes.NewReader(output))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, "longhorn") {
+				dev := strings.Fields(line)[0]
+				err = runCommand(logChan, "dmsetup", "remove", dev)
+				if err != nil {
+					logChan <- fmt.Sprintf("Warning: Failed to remove device-mapper entry %s, continuing anyway", dev)
+				}
+			}
+		}
+	}
+
+	// 3. Unmount Longhorn mountpoints
+	cmd = exec.Command("mount")
+	output, err = cmd.Output()
+	if err == nil {
+		scanner := bufio.NewScanner(bytes.NewReader(output))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, "longhorn") {
+				fields := strings.Fields(line)
+				if len(fields) >= 3 {
+					mountpoint := fields[2]
+					err = runCommand(logChan, "umount", mountpoint)
+					if err != nil {
+						logChan <- fmt.Sprintf("Warning: Failed to unmount %s, continuing anyway", mountpoint)
+					}
+				}
+			}
+		}
+	}
+
+	// 4. Remove Longhorn directories and files
+	longhornPaths := []string{
+		"/var/lib/longhorn",
+		"/var/lib/rancher/longhorn",
+		"/var/lib/kubelet/plugins/driver.longhorn.io",
+		"/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io",
+		"/dev/longhorn",
+	}
+
+	for _, path := range longhornPaths {
+		err = os.RemoveAll(path)
+		if err != nil {
+			logChan <- fmt.Sprintf("Warning: Failed to remove %s, continuing anyway", path)
+		}
+	}
+
+	logChan <- "Longhorn cleanup completed, proceeding with K3s uninstall..."
+
+	// Now proceed with K3s uninstall
 	logChan <- fmt.Sprintf("Executing K3s uninstall script: %s", uninstallScriptPath)
 
-	cmd := exec.Command(uninstallScriptPath)
+	cmd = exec.Command(uninstallScriptPath)
 	var stdOut, stdErr bytes.Buffer
 	cmd.Stdout = &stdOut
 	cmd.Stderr = &stdErr
 
-	err := cmd.Run()
+	err = cmd.Run()
 
 	// Log output even if there's an error
 	if stdOut.Len() > 0 {

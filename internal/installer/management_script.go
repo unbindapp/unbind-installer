@@ -86,12 +86,30 @@ handle_uninstall() {
     
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo -e "${YELLOW}Uninstalling Unbind...${NC}"
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        kubectl create -f https://raw.githubusercontent.com/longhorn/longhorn/v1.8.1/uninstall/uninstall.yaml || true
+        kubectl -n longhorn-system get job/longhorn-uninstall -w || true
+        sleep 10 # Give longhorn time to uninstall
         /usr/local/bin/k3s-uninstall.sh
         # Remove longhorn
-        if [ -d "/var/lib/longhorn" ]; then
-            echo -e "${YELLOW}Removing Longhorn...${NC}"
-            rm -rf /var/lib/longhorn
-        fi
+        # 1. Log out of any leftover iSCSI sessions Longhorn created
+        iscsiadm -m session | awk '/rancher.longhorn/ {print $2}' | xargs -r -I{} iscsiadm -m session -r {} -u || true
+        iscsiadm -m node --targetname iqn.2014-09.io.rancher.longhorn* -o delete || true
+
+        # 2. Remove any device-mapper entries that still reference Longhorn
+        for dev in $(sudo dmsetup ls 2>/dev/null | grep longhorn | awk '{print $1}'); do
+            dmsetup remove "$dev" || true
+        done
+
+        # 3. Unmount and delete mountpoints that the k3s uninstall script ignored
+        umount $(mount | grep longhorn | awk '{print $3}') 2>/dev/null || true
+
+        # 4. Blow away the on-disk data and plugin sockets
+        rm -rf /var/lib/longhorn \
+                    /var/lib/rancher/longhorn \
+                    /var/lib/kubelet/plugins/driver.longhorn.io \
+                    /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io \
+                    /dev/longhorn 2>/dev/null || true
         print_banner
         print_box "Unbind has been uninstalled successfully." "$GREEN"
     else
