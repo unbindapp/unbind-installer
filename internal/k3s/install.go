@@ -499,6 +499,66 @@ fs.inotify.max_user_instances = 2099999999`
 			},
 		},
 		{
+			Description: "Pre-fetching common container images",
+			Progress:    0.87,
+			Action: func(ctx context.Context) error {
+				// List of common images to pre-fetch
+				images := []string{
+					"ghcr.io/zalando/postgres-operator:v1.14.0",
+					"ghcr.io/unbindapp/spilo:17-latest",
+					"bitnami/valkey:8.1.1-debian-12-r0",
+					"registry:2",
+					"registry.k8s.io/ingress-nginx/controller:v1.12.2",
+					"quay.io/jetstack/cert-manager-controller",
+					"unbindapp/dex:master-14777142866",
+					"ghcr.io/unbindapp/kube-oidc-proxy:master-14884925050",
+				}
+
+				self.log(fmt.Sprintf("Starting pre-fetch of %d container images...", len(images)))
+
+				// Create a channel to collect errors
+				errChan := make(chan error, len(images))
+				// Create a channel to track completion
+				doneChan := make(chan struct{}, len(images))
+				// Create a semaphore to limit concurrent pulls
+				sem := make(chan struct{}, 5) // Limit to 5 concurrent pulls
+
+				// Launch goroutines for each image
+				for _, image := range images {
+					go func(img string) {
+						sem <- struct{}{}
+						defer func() {
+							<-sem
+							doneChan <- struct{}{}
+						}()
+
+						cmd := exec.CommandContext(ctx, "ctr", "images", "pull", img)
+						if output, err := cmd.CombinedOutput(); err != nil {
+							errChan <- fmt.Errorf("failed to pull image %s: %w, output: %s", img, err, string(output))
+							return
+						}
+						self.log(fmt.Sprintf("Successfully pre-fetched image: %s", img))
+					}(image)
+				}
+
+				// Wait for all goroutines to complete
+				for i := 0; i < len(images); i++ {
+					select {
+					case err := <-errChan:
+						// Silently log the error without affecting the process
+						self.log(fmt.Sprintf("Image pre-fetch failed: %v", err))
+					case <-doneChan:
+						// Image pull completed
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+
+				self.log("Container image pre-fetch completed")
+				return nil
+			},
+		},
+		{
 			Description: "Installing Longhorn storage system",
 			Progress:    0.80,
 			Action: func(ctx context.Context) error {
