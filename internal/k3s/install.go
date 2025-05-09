@@ -401,9 +401,6 @@ fs.inotify.max_user_instances = 2099999999`
 
 				self.log(fmt.Sprintf("Helm successfully installed: %s", strings.TrimSpace(string(out))))
 
-				// Set helm path for later use
-				os.Setenv("HELM_PATH", destPath)
-
 				// Install Helm diff plugin
 				self.log("Installing Helm diff plugin...")
 				cmd = exec.CommandContext(ctx, destPath, "plugin", "install", "https://github.com/databus23/helm-diff")
@@ -469,9 +466,6 @@ fs.inotify.max_user_instances = 2099999999`
 				}
 
 				self.log(fmt.Sprintf("Helmfile successfully installed: %s", strings.TrimSpace(string(out))))
-
-				// Set helmfile path for later use
-				os.Setenv("HELMFILE_PATH", destPath)
 
 				return nil
 			},

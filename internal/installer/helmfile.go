@@ -102,18 +102,6 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 			Description: "Running helmfile sync",
 			Progress:    0.30,
 			Action: func(ctx context.Context) error {
-				// Get helmfile path (if we installed it) or use "helmfile" command
-				helmfilePath := os.Getenv("HELMFILE_PATH")
-				if helmfilePath == "" {
-					helmfilePath = "helmfile"
-				}
-
-				// Ensure HELM_PATH is in the environment if we installed it
-				if helmPath := os.Getenv("HELM_PATH"); helmPath != "" {
-					// Make helm executable available to helmfile by putting it in the PATH
-					os.Setenv("PATH", filepath.Dir(helmPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
-				}
-
 				// Construct arguments for helmfile command
 				args := []string{
 					"--file", filepath.Join(repoDir, "helmfile.yaml"),
@@ -133,7 +121,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				self.logProgress(dependencyName, 0.31, fmt.Sprintf("Starting installation with %s", strings.Join(args, "|")), nil, StatusInstalling)
 
 				// Set up the command to run helmfile sync
-				cmd := exec.CommandContext(ctx, helmfilePath, args...)
+				cmd := exec.CommandContext(ctx, "helmfile", args...)
 				cmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.kubeConfigPath))
 
 				// Start progress updates during wait
@@ -243,10 +231,6 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 						self.sendLog("Cleaned up temporary repository directory")
 					}
 				}
-
-				// Clear the environment variables we set
-				os.Unsetenv("HELMFILE_PATH")
-				os.Unsetenv("HELM_PATH")
 
 				return nil
 			},
