@@ -506,10 +506,9 @@ fs.inotify.max_user_instances = 2099999999`
 				images := []string{
 					"ghcr.io/zalando/postgres-operator:v1.14.0",
 					"ghcr.io/unbindapp/spilo:17-latest",
-					"bitnami/valkey:8.1.1-debian-12-r0",
-					"registry:2",
+					"docker.io/bitnami/valkey:8.1.1-debian-12-r0",
+					"docker.io/registry:2",
 					"registry.k8s.io/ingress-nginx/controller:v1.12.2",
-					"quay.io/jetstack/cert-manager-controller",
 					"unbindapp/dex:master-14777142866",
 					"ghcr.io/unbindapp/kube-oidc-proxy:master-14884925050",
 				}
