@@ -953,12 +953,74 @@ func viewExternalRegistryInput(m Model) string {
 	s.WriteString(m.styles.Bold.Render("Enter External Registry Credentials"))
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Normal.Render("Please enter your registry credentials:"))
+	s.WriteString(m.styles.Normal.Render("Please select a registry and enter your credentials:"))
 	s.WriteString("\n\n")
 
-	// Default registry host explanation
+	// Registry selection
+	s.WriteString(m.styles.Bold.Render("Select Registry:"))
+	s.WriteString("\n")
+
+	// Docker Hub
+	if m.selectedRegistry == 0 {
+		s.WriteString(m.styles.SelectedOption.Render("→ [1] Docker Hub (docker.io)"))
+	} else {
+		s.WriteString(m.styles.Normal.Render("  [1] Docker Hub (docker.io)"))
+	}
+	s.WriteString("\n")
+
+	// GitHub Container Registry
+	if m.selectedRegistry == 1 {
+		s.WriteString(m.styles.SelectedOption.Render("→ [2] GitHub Container Registry (ghcr.io)"))
+	} else {
+		s.WriteString(m.styles.Normal.Render("  [2] GitHub Container Registry (ghcr.io)"))
+	}
+	s.WriteString("\n")
+
+	// Red Hat Quay
+	if m.selectedRegistry == 2 {
+		s.WriteString(m.styles.SelectedOption.Render("→ [3] Red Hat Quay (quay.io)"))
+	} else {
+		s.WriteString(m.styles.Normal.Render("  [3] Red Hat Quay (quay.io)"))
+	}
+	s.WriteString("\n")
+
+	// Custom Registry
+	if m.selectedRegistry == 3 {
+		s.WriteString(m.styles.SelectedOption.Render("→ [4] Custom Registry"))
+	} else {
+		s.WriteString(m.styles.Normal.Render("  [4] Custom Registry"))
+	}
+	s.WriteString("\n\n")
+
+	// Custom registry field if selected
+	if m.selectedRegistry == 3 {
+		customRegistryInput := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#009900")).
+			Padding(0, 1).
+			Render(fmt.Sprintf("Registry Host: %s", m.registryHostInput.View()))
+
+		s.WriteString(customRegistryInput)
+		s.WriteString("\n\n")
+	}
+
+	// Show current registry
 	s.WriteString(m.styles.Bold.Render("Registry: "))
-	s.WriteString(m.styles.Normal.Render("Docker Hub (docker.io)"))
+	var registryHost string
+	switch m.selectedRegistry {
+	case 0:
+		registryHost = "docker.io"
+	case 1:
+		registryHost = "ghcr.io"
+	case 2:
+		registryHost = "quay.io"
+	case 3:
+		registryHost = m.registryHostInput.Value()
+		if registryHost == "" {
+			registryHost = "registry.example.com"
+		}
+	}
+	s.WriteString(m.styles.Normal.Render(getRegistryDisplayName(registryHost)))
 	s.WriteString("\n\n")
 
 	// Username input field
@@ -986,6 +1048,10 @@ func viewExternalRegistryInput(m Model) string {
 
 	// Navigation hints
 	s.WriteString(m.styles.Bold.Render("Navigation:"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("1-4"))
+	s.WriteString(m.styles.Normal.Render(" to select registry type"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("• Press "))
 	s.WriteString(m.styles.Key.Render("Tab"))
@@ -1017,21 +1083,78 @@ func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd
 		return m, m.listenForLogs()
 	}
 
+	// Check for registry selection keys
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case "1":
+			// Docker Hub
+			m.selectedRegistry = 0
+			if m.usernameInput.Focused() || m.passwordInput.Focused() || m.registryHostInput.Focused() {
+				// Keep current focus
+			} else {
+				m.usernameInput.Focus()
+			}
+			return m, m.listenForLogs()
+		case "2":
+			// GitHub Container Registry
+			m.selectedRegistry = 1
+			if m.usernameInput.Focused() || m.passwordInput.Focused() || m.registryHostInput.Focused() {
+				// Keep current focus
+			} else {
+				m.usernameInput.Focus()
+			}
+			return m, m.listenForLogs()
+		case "3":
+			// Red Hat Quay
+			m.selectedRegistry = 2
+			if m.usernameInput.Focused() || m.passwordInput.Focused() || m.registryHostInput.Focused() {
+				// Keep current focus
+			} else {
+				m.usernameInput.Focus()
+			}
+			return m, m.listenForLogs()
+		case "4":
+			// Custom Registry
+			m.selectedRegistry = 3
+			if !m.registryHostInput.Focused() && !m.usernameInput.Focused() && !m.passwordInput.Focused() {
+				m.registryHostInput.Focus()
+			}
+			return m, m.listenForLogs()
+		}
+	}
+
 	// Check if tab was pressed
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "tab" {
 		// Toggle focus between inputs
-		if m.usernameInput.Focused() {
-			m.usernameInput.Blur()
-			m.passwordInput.Focus()
+		if m.selectedRegistry == 3 {
+			// Custom registry has 3 fields
+			if m.registryHostInput.Focused() {
+				m.registryHostInput.Blur()
+				m.usernameInput.Focus()
+			} else if m.usernameInput.Focused() {
+				m.usernameInput.Blur()
+				m.passwordInput.Focus()
+			} else {
+				m.passwordInput.Blur()
+				m.registryHostInput.Focus()
+			}
 		} else {
-			m.passwordInput.Blur()
-			m.usernameInput.Focus()
+			// Other registries have 2 fields
+			if m.usernameInput.Focused() {
+				m.usernameInput.Blur()
+				m.passwordInput.Focus()
+			} else {
+				m.passwordInput.Blur()
+				m.usernameInput.Focus()
+			}
 		}
 		return m, nil
 	}
 
 	// Update the focused input
-	if m.usernameInput.Focused() {
+	if m.registryHostInput.Focused() {
+		m.registryHostInput, cmd = m.registryHostInput.Update(msg)
+	} else if m.usernameInput.Focused() {
 		m.usernameInput, cmd = m.usernameInput.Update(msg)
 	} else {
 		m.passwordInput, cmd = m.passwordInput.Update(msg)
@@ -1043,11 +1166,27 @@ func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd
 	}
 	m.dnsInfo.RegistryUsername = m.usernameInput.Value()
 	m.dnsInfo.RegistryPassword = m.passwordInput.Value()
-	m.dnsInfo.RegistryHost = "docker.io" // Default registry host
+
+	// Set registry host based on selection
+	switch m.selectedRegistry {
+	case 0:
+		m.dnsInfo.RegistryHost = "docker.io"
+	case 1:
+		m.dnsInfo.RegistryHost = "ghcr.io"
+	case 2:
+		m.dnsInfo.RegistryHost = "quay.io"
+	case 3:
+		m.dnsInfo.RegistryHost = m.registryHostInput.Value()
+	}
 
 	// If Enter was pressed with valid credentials, start validation
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
 		if m.dnsInfo.RegistryUsername != "" && m.dnsInfo.RegistryPassword != "" {
+			// For custom registry, also require host
+			if m.selectedRegistry == 3 && m.dnsInfo.RegistryHost == "" {
+				return m, m.listenForLogs()
+			}
+
 			m.state = StateExternalRegistryValidation
 			m.isLoading = true
 			m.dnsInfo.TestingStartTime = time.Now()
@@ -1087,7 +1226,7 @@ func viewExternalRegistryValidation(m Model) string {
 	s.WriteString(m.styles.Bold.Render("Verifying:"))
 	s.WriteString("\n")
 	s.WriteString(fmt.Sprintf("  • Username: %s\n", m.styles.Normal.Render(m.dnsInfo.RegistryUsername)))
-	s.WriteString(fmt.Sprintf("  • Registry: %s\n", m.styles.Normal.Render("Docker Hub (docker.io)")))
+	s.WriteString(fmt.Sprintf("  • Registry: %s\n", m.styles.Normal.Render(getRegistryDisplayName(m.dnsInfo.RegistryHost))))
 	s.WriteString("\n")
 
 	// Process logs

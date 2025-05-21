@@ -32,7 +32,7 @@ func (self *AptInstaller) InstallPackages(packages []string, progressFunc Progre
 	// Log what we're doing
 	self.log("Updating apt package lists...")
 	if progressFunc != nil {
-		progressFunc("", currentStep/totalSteps, "Updating package lists", false)
+		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Updating package lists", false)
 	}
 
 	// Update package lists
@@ -47,7 +47,7 @@ func (self *AptInstaller) InstallPackages(packages []string, progressFunc Progre
 	// Update progress
 	currentStep++
 	if progressFunc != nil {
-		progressFunc("", currentStep/totalSteps, "Package lists updated", false)
+		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Package lists updated", false)
 	}
 
 	// Install packages
@@ -55,7 +55,7 @@ func (self *AptInstaller) InstallPackages(packages []string, progressFunc Progre
 
 	// Update progress for starting installation
 	if progressFunc != nil {
-		progressFunc("", currentStep/totalSteps, "Starting installation", false)
+		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Starting installation", false)
 	}
 
 	args := append([]string{"install", "-y"}, packages...)
@@ -69,13 +69,13 @@ func (self *AptInstaller) InstallPackages(packages []string, progressFunc Progre
 	// Update progress for installation completion
 	currentStep++
 	if progressFunc != nil {
-		progressFunc("", currentStep/totalSteps, "Packages installed", false)
+		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Packages installed", false)
 	}
 
 	// Final verification step
 	currentStep++
 	if progressFunc != nil {
-		progressFunc("", currentStep/totalSteps, "Verifying installation", false)
+		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Verifying installation", false)
 	}
 
 	self.log("Packages installed successfully")

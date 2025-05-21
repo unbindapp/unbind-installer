@@ -39,11 +39,13 @@ type Model struct {
 	logChan     chan string
 
 	// Feature-specific data
-	dnsInfo       *dnsInfo
-	domainInput   textinput.Model
-	registryInput textinput.Model
-	usernameInput textinput.Model
-	passwordInput textinput.Model
+	dnsInfo           *dnsInfo
+	domainInput       textinput.Model
+	registryInput     textinput.Model
+	usernameInput     textinput.Model
+	passwordInput     textinput.Model
+	registryHostInput textinput.Model
+	selectedRegistry  int // 0=docker.io, 1=ghcr.io, 2=quay.io, 3=custom
 
 	// Kube client
 	kubeConfig      string
@@ -89,6 +91,12 @@ func NewModel(version string) Model {
 	usernameInput := initializeUsernameInput()
 	passwordInput := initializePasswordInput()
 
+	// Initialize registry host input
+	registryHostInput := textinput.New()
+	registryHostInput.Placeholder = "registry.example.com"
+	registryHostInput.Width = 30
+	registryHostInput.Prompt = ""
+
 	// Initialize swap input
 	swapInput := textinput.New()
 	swapInput.Placeholder = "e.g., 4"
@@ -125,6 +133,8 @@ func NewModel(version string) Model {
 		registryInput:       registryInput,
 		usernameInput:       usernameInput,
 		passwordInput:       passwordInput,
+		registryHostInput:   registryHostInput,
+		selectedRegistry:    0, // Default to Docker Hub
 		swapSizeInput:       swapInput,
 		packageProgressChan: packageProgressChan,
 	}

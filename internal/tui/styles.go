@@ -81,6 +81,10 @@ func NewStyles(theme AppTheme) Styles {
 			Background(lipgloss.Color(theme.Primary)).
 			Padding(0, 2).
 			Bold(true),
+
+		SelectedOption: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Accent)).
+			Bold(true),
 	}
 }
 
@@ -97,6 +101,7 @@ type Styles struct {
 	SpinnerStyle    lipgloss.Style
 	Success         lipgloss.Style
 	HighlightButton lipgloss.Style
+	SelectedOption  lipgloss.Style
 }
 
 // Add a method to create a themed progress bar to the Styles struct
