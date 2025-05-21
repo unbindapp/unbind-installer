@@ -39,8 +39,9 @@ type Model struct {
 	logChan     chan string
 
 	// Feature-specific data
-	dnsInfo     *dnsInfo
-	domainInput textinput.Model
+	dnsInfo       *dnsInfo
+	domainInput   textinput.Model
+	registryInput textinput.Model
 
 	// Kube client
 	kubeConfig      string
@@ -73,6 +74,9 @@ func NewModel(version string) Model {
 
 	// Initialize domain input
 	domainInput := initializeDomainInput()
+
+	// Initialize registry input
+	registryInput := initializeRegistryInput()
 
 	// Initialize swap input
 	swapInput := textinput.New()
@@ -107,6 +111,7 @@ func NewModel(version string) Model {
 			Description: "Initializing K3S installation",
 		},
 		domainInput:   domainInput,
+		registryInput: registryInput,
 		swapSizeInput: swapInput,
 	}
 }
@@ -196,6 +201,10 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = self.updateDNSSuccessState(msg)
 	case StateDNSFailed:
 		model, cmd = self.updateDNSFailedState(msg)
+	case StateRegistryDomainInput:
+		model, cmd = self.updateRegistryDomainInputState(msg)
+	case StateRegistryDNSValidation:
+		model, cmd = self.updateRegistryDNSValidationState(msg)
 	case StateError:
 		model, cmd = self.updateErrorState(msg)
 	case StateInstallingK3S:
@@ -269,6 +278,10 @@ func (self Model) View() string {
 		return viewInstallingUnbind(self)
 	case StateInstallationComplete:
 		return viewInstallationComplete(self)
+	case StateRegistryDomainInput:
+		return viewRegistryDomainInput(self)
+	case StateRegistryDNSValidation:
+		return viewRegistryDNSValidation(self)
 	default:
 		return viewWelcome(self)
 	}

@@ -27,6 +27,8 @@ const (
 	StateDNSValidation
 	StateDNSSuccess
 	StateDNSFailed
+	StateRegistryDomainInput
+	StateRegistryDNSValidation
 	StateInstallingK3S
 	StateInstallingUnbind
 	StateInstallationComplete

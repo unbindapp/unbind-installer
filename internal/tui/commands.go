@@ -138,15 +138,15 @@ func (self Model) startDetectingIPs() tea.Cmd {
 	}
 }
 
-// startDNSValidation launches the DNS validation process.
+// startMainDNSValidation launches the DNS validation process.
 //
 // Validation rules:
-//  1. unbind.<baseDomain> must resolve (Cloudflare proxy allowed but not required).
-//  2. unbind-registry.<baseDomain> must resolve *without* being behind Cloudflare.
-//  3. If an arbitrary sub‑domain resolves, wildcard DNS is assumed and the wildcard flag is set.
-func (self Model) startDNSValidation() tea.Cmd {
+//  1. <domain> must resolve
+//  2. If wildcard DNS is detected, try to detect registry domain
+//  3. If can't detect registry/wildcard, move to prompting for registry domain
+func (self Model) startMainDNSValidation() tea.Cmd {
 	return func() tea.Msg {
-		if self.dnsInfo == nil || self.dnsInfo.Domain == "" {
+		if self.dnsInfo == nil || self.dnsInfo.UnbindDomain == "" {
 			return errMsg{err: nil}
 		}
 
@@ -155,25 +155,12 @@ func (self Model) startDNSValidation() tea.Cmd {
 		base := strings.TrimPrefix(self.dnsInfo.Domain, "*.")
 
 		/* -------------------------------------------------------------------- */
-		// 1. unbind.<baseDomain>
+		// 1. unbind domain
 		/* -------------------------------------------------------------------- */
-		unbindValid, unbindCF := self.validateDomain("unbind."+base, true)
+		unbindValid, unbindCF := self.validateDomain(base, true)
 
 		/* -------------------------------------------------------------------- */
-		// 2. unbind-registry.<baseDomain> (CF proxy *not* allowed)
-		/* -------------------------------------------------------------------- */
-		registryValid, registryCF := self.validateDomain("unbind-registry."+base, false)
-		if registryCF {
-			self.log("ERROR: Registry domain must not be behind Cloudflare proxy")
-			return dnsValidationCompleteMsg{
-				success:       false,
-				cloudflare:    true,
-				registryIssue: true,
-			}
-		}
-
-		/* -------------------------------------------------------------------- */
-		// 3. Wildcard detection via arbitrary sub‑domain
+		// 2. Wildcard detection via arbitrary sub‑domain
 		/* -------------------------------------------------------------------- */
 		wildcardValid, wildcardCF := self.detectWildcard(base)
 		if wildcardValid {
@@ -181,28 +168,89 @@ func (self Model) startDNSValidation() tea.Cmd {
 		}
 
 		/* -------------------------------------------------------------------- */
+		// 3. Registry domain check (only if wildcard is detected)
+		/* -------------------------------------------------------------------- */
+		var registryValid, registryCF bool
+		registryDomain := "unbind-registry." + base
+
+		// Only validate registry if wildcard is detected, no registry validation errors
+		if self.dnsInfo.IsWildcard {
+			registryValid, registryCF = self.validateDomain(registryDomain, false)
+
+			// Set registry domain if valid and not behind Cloudflare proxy
+			if registryValid && !registryCF {
+				self.dnsInfo.RegistryDomain = registryDomain
+				self.log("Registry domain detected and valid: " + registryDomain)
+			} else {
+				// Clear registry domain to trigger manual input later
+				self.dnsInfo.RegistryDomain = ""
+				self.log("Registry domain needs manual configuration")
+			}
+		} else {
+			// Clear registry domain to trigger manual input later if not using wildcard
+			self.dnsInfo.RegistryDomain = ""
+		}
+
+		/* -------------------------------------------------------------------- */
 		// Final decision matrix
 		/* -------------------------------------------------------------------- */
-		switch {
-		case wildcardValid && registryValid:
+
+		// If wildcard domain is valid, always return success
+		if wildcardValid {
 			self.log("Wildcard domain detected and validated successfully")
 			return dnsValidationCompleteMsg{
 				success:    true,
 				cloudflare: wildcardCF || unbindCF,
 			}
+		}
 
-		case !wildcardValid && (unbindValid || unbindCF) && registryValid:
-			self.log("Individual A records validated successfully")
+		// If main domain is valid but no wildcard, return success
+		if unbindValid || unbindCF {
+			self.log("Main domain validated successfully")
 			return dnsValidationCompleteMsg{
 				success:    true,
 				cloudflare: unbindCF,
 			}
+		}
 
-		default:
-			self.log("DNS validation failed")
+		// Otherwise validation failed
+		self.log("DNS validation failed")
+		return dnsValidationCompleteMsg{
+			success:    false,
+			cloudflare: unbindCF || registryCF || wildcardCF,
+		}
+	}
+}
+
+// startRegistryDNSValidation validates just the registry domain
+func (self Model) startRegistryDNSValidation() tea.Cmd {
+	return func() tea.Msg {
+		if self.dnsInfo == nil || self.dnsInfo.RegistryDomain == "" {
+			return errMsg{err: nil}
+		}
+
+		self.log("Starting registry domain validation…")
+
+		// Validate registry domain (CF proxy *not* allowed)
+		registryValid, registryCF := self.validateDomain(self.dnsInfo.RegistryDomain, false)
+
+		if registryValid && !registryCF {
+			self.log("Registry domain validated successfully")
+			return dnsValidationCompleteMsg{
+				success:    true,
+				cloudflare: false,
+			}
+		} else {
+			// If validation fails, don't show errors, just return false
+			if registryCF {
+				self.log("Registry domain is behind Cloudflare proxy, which is not allowed")
+			} else {
+				self.log("Registry domain validation failed")
+			}
+
 			return dnsValidationCompleteMsg{
 				success:    false,
-				cloudflare: unbindCF || registryCF || wildcardCF,
+				cloudflare: registryCF,
 			}
 		}
 	}
