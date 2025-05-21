@@ -20,13 +20,20 @@ func NewDNFInstaller(logChan chan<- string) *DNFInstaller {
 }
 
 // InstallPackages installs the specified packages using dnf
-func (self *DNFInstaller) InstallPackages(packages []string) error {
+func (self *DNFInstaller) InstallPackages(packages []string, progressFunc ProgressFunc) error {
 	if len(packages) == 0 {
 		return nil
 	}
 
+	// Total number of phases to report progress
+	totalSteps := float64(4) // Update, Download, Install, Verify
+	currentStep := float64(0)
+
 	// Log what we're doing
-	self.log(fmt.Sprintf("Updating dnf package lists..."))
+	self.log("Updating dnf package lists...")
+	if progressFunc != nil {
+		progressFunc("", currentStep/totalSteps, "Updating package lists", false)
+	}
 
 	// Update package lists
 	updateCmd := exec.Command("dnf", "update", "-y")
@@ -37,8 +44,20 @@ func (self *DNFInstaller) InstallPackages(packages []string) error {
 	}
 	self.log("Package lists updated successfully")
 
+	// Update progress
+	currentStep++
+	if progressFunc != nil {
+		progressFunc("", currentStep/totalSteps, "Package lists updated", false)
+	}
+
 	// Install packages
 	self.log(fmt.Sprintf("Installing packages: %s", strings.Join(packages, ", ")))
+
+	// Update progress for starting installation
+	if progressFunc != nil {
+		progressFunc("", currentStep/totalSteps, "Starting installation", false)
+	}
+
 	args := append([]string{"install", "-y"}, packages...)
 	installCmd := exec.Command("dnf", args...)
 	installOutput, err := installCmd.CombinedOutput()
@@ -47,7 +66,25 @@ func (self *DNFInstaller) InstallPackages(packages []string) error {
 		return fmt.Errorf("failed to install packages: %w", err)
 	}
 
+	// Update progress for installation completion
+	currentStep++
+	if progressFunc != nil {
+		progressFunc("", currentStep/totalSteps, "Packages installed", false)
+	}
+
+	// Final verification step
+	currentStep++
+	if progressFunc != nil {
+		progressFunc("", currentStep/totalSteps, "Verifying installation", false)
+	}
+
 	self.log("Packages installed successfully")
+
+	// Complete
+	if progressFunc != nil {
+		progressFunc("", 1.0, "Installation complete", true)
+	}
+
 	return nil
 }
 

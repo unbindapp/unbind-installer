@@ -57,6 +57,10 @@ type Model struct {
 	// Helmfile progress
 	unbindProgressChan chan installer.UnbindInstallUpdateMsg
 	unbindProgress     installer.UnbindInstallUpdateMsg
+
+	// Package install progress
+	packageProgressChan chan packageInstallProgressMsg
+	packageProgress     packageInstallProgressMsg
 }
 
 // NewModel initializes a new Model
@@ -73,6 +77,7 @@ func NewModel(version string) Model {
 	logChan := make(chan string, 100) // Buffer for log messages
 
 	progressChan := make(chan installer.UnbindInstallUpdateMsg)
+	packageProgressChan := make(chan packageInstallProgressMsg, 10)
 
 	// Initialize domain input
 	domainInput := initializeDomainInput()
@@ -116,11 +121,12 @@ func NewModel(version string) Model {
 			Status:      "pending",
 			Description: "Initializing K3S installation",
 		},
-		domainInput:   domainInput,
-		registryInput: registryInput,
-		usernameInput: usernameInput,
-		passwordInput: passwordInput,
-		swapSizeInput: swapInput,
+		domainInput:         domainInput,
+		registryInput:       registryInput,
+		usernameInput:       usernameInput,
+		passwordInput:       passwordInput,
+		swapSizeInput:       swapInput,
+		packageProgressChan: packageProgressChan,
 	}
 }
 
@@ -130,6 +136,7 @@ func (self Model) Init() tea.Cmd {
 		self.listenForLogs(),
 		self.listenForUnbindProgress(),
 		self.listenForK3SProgress(),
+		self.listenForPackageProgress(),
 	)
 }
 
@@ -304,5 +311,41 @@ func (self Model) View() string {
 		return viewExternalRegistryValidation(self)
 	default:
 		return viewWelcome(self)
+	}
+}
+
+// listenForK3SProgress returns a command that listens for K3S progress messages
+func (self Model) listenForK3SProgress() tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg, ok := <-self.k3sProgressChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+			self.k3sProgress = msg
+			return msg
+		default:
+			// Don't block if no message is available
+			return tickMsg{} // A dummy message to keep the command running
+		}
+	}
+}
+
+// listenForPackageProgress returns a command that listens for package installation progress
+func (self Model) listenForPackageProgress() tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg, ok := <-self.packageProgressChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+			self.packageProgress = msg
+			return msg
+		default:
+			// Don't block if no message is available
+			return tickMsg{} // A dummy message to keep the command running
+		}
 	}
 }

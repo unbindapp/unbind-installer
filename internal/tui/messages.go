@@ -42,6 +42,13 @@ type installPackagesMsg struct{}
 
 type installCompleteMsg struct{}
 
+type packageInstallProgressMsg struct {
+	packageName string
+	progress    float64
+	step        string
+	isComplete  bool
+}
+
 // * DNS-related messages
 type detectIPsMsg struct{}
 

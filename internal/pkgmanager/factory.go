@@ -2,9 +2,12 @@ package pkgmanager
 
 import "fmt"
 
+// ProgressFunc is a function to report progress during package installation
+type ProgressFunc func(packageName string, progress float64, step string, isComplete bool)
+
 // PackageManager defines the interface for package managers
 type PackageManager interface {
-	InstallPackages(packages []string) error
+	InstallPackages(packages []string, progressFunc ProgressFunc) error
 }
 
 // NewPackageManager creates a new package manager based on the distribution

@@ -111,8 +111,19 @@ func (self Model) installRequiredPackages() tea.Cmd {
 			return errMsg{err}
 		}
 
+		// Progress reporting function
+		progressFunc := func(packageName string, progress float64, step string, isComplete bool) {
+			// Send progress update to the UI
+			self.packageProgressChan <- packageInstallProgressMsg{
+				packageName: packageName,
+				progress:    progress,
+				step:        step,
+				isComplete:  isComplete,
+			}
+		}
+
 		// Install the packages
-		err = installer.InstallPackages(packages)
+		err = installer.InstallPackages(packages, progressFunc)
 		if err != nil {
 			return errMsg{err}
 		}
@@ -143,8 +154,8 @@ func (self Model) startDetectingIPs() tea.Cmd {
 //
 // Validation rules:
 //  1. <domain> must resolve
-//  2. If wildcard DNS is detected, try to detect registry domain
-//  3. If can't detect registry/wildcard, move to prompting for registry domain
+//  2. If wildcard DNS is detected, mark it
+//  3. Always proceed to registry selection afterward
 func (self Model) startMainDNSValidation() tea.Cmd {
 	return func() tea.Msg {
 		if self.dnsInfo == nil || self.dnsInfo.UnbindDomain == "" {
@@ -169,28 +180,11 @@ func (self Model) startMainDNSValidation() tea.Cmd {
 		}
 
 		/* -------------------------------------------------------------------- */
-		// 3. Registry domain check (only if wildcard is detected)
+		// Do not detect registry domain - we'll always prompt for it later
 		/* -------------------------------------------------------------------- */
-		var registryValid, registryCF bool
-		registryDomain := "unbind-registry." + base
 
-		// Only validate registry if wildcard is detected, no registry validation errors
-		if self.dnsInfo.IsWildcard {
-			registryValid, registryCF = self.validateDomain(registryDomain, false)
-
-			// Set registry domain if valid and not behind Cloudflare proxy
-			if registryValid && !registryCF {
-				self.dnsInfo.RegistryDomain = registryDomain
-				self.log("Registry domain detected and valid: " + registryDomain)
-			} else {
-				// Clear registry domain to trigger manual input later
-				self.dnsInfo.RegistryDomain = ""
-				self.log("Registry domain needs manual configuration")
-			}
-		} else {
-			// Clear registry domain to trigger manual input later if not using wildcard
-			self.dnsInfo.RegistryDomain = ""
-		}
+		// Always clear registry domain to force manual registry configuration
+		self.dnsInfo.RegistryDomain = ""
 
 		/* -------------------------------------------------------------------- */
 		// Final decision matrix
@@ -218,7 +212,7 @@ func (self Model) startMainDNSValidation() tea.Cmd {
 		self.log("DNS validation failed")
 		return dnsValidationCompleteMsg{
 			success:    false,
-			cloudflare: unbindCF || registryCF || wildcardCF,
+			cloudflare: unbindCF || wildcardCF,
 		}
 	}
 }

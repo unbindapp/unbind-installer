@@ -11,23 +11,6 @@ import (
 	"github.com/unbindapp/unbind-installer/internal/k3s"
 )
 
-// listenForProgress returns a command that listens for progress updates
-func (self Model) listenForK3SProgress() tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case msg, ok := <-self.k3sProgressChan:
-			if !ok {
-				// Channel closed
-				return nil
-			}
-			return msg
-		default:
-			// Don't block if no message is available
-			return nil
-		}
-	}
-}
-
 // viewInstallingK3S shows the K3S installation screen with progress tracking
 func viewInstallingK3S(m Model) string {
 	s := strings.Builder{}

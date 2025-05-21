@@ -46,6 +46,32 @@ func viewInstallingPackages(m Model) string {
 		s.WriteString(fmt.Sprintf("  %s %s\n", m.styles.Key.Render("•"), m.styles.Normal.Render(pkg)))
 	}
 
+	// Package installation progress
+	if m.packageProgress.step != "" {
+		s.WriteString("\n")
+		s.WriteString(m.styles.Bold.Render("Progress:"))
+		s.WriteString("\n")
+		s.WriteString(fmt.Sprintf("  %s\n", m.styles.Subtle.Render(m.packageProgress.step)))
+
+		// Progress bar width calculation
+		progressBarWidth := m.width - 40
+		if progressBarWidth < 20 {
+			progressBarWidth = 20
+		}
+
+		// Progress bar for installation
+		prog := m.styles.NewThemedProgress(progressBarWidth)
+		s.WriteString("  ")
+		s.WriteString(prog.ViewAs(m.packageProgress.progress))
+
+		// Show completion status if complete
+		if m.packageProgress.isComplete {
+			s.WriteString(" ✓")
+		}
+
+		s.WriteString("\n")
+	}
+
 	// Installation logs if any
 	if len(m.logMessages) > 0 {
 		s.WriteString("\n")
@@ -79,7 +105,25 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, tea.Batch(cmd, m.listenForLogs())
+		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForPackageProgress())
+
+	case packageInstallProgressMsg:
+		// Update package progress in the model
+		m.packageProgress = msg
+
+		// If installation is complete, let the process continue
+		if msg.isComplete {
+			// Add a small delay to show the completed state first
+			return m, tea.Batch(
+				m.listenForLogs(),
+				m.listenForPackageProgress(),
+				tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+					return installCompleteMsg{}
+				}),
+			)
+		}
+
+		return m, tea.Batch(m.listenForLogs(), m.listenForPackageProgress())
 
 	case installCompleteMsg:
 		m.state = StateInstallComplete
@@ -105,7 +149,7 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.listenForLogs()
 	}
 
-	return m, m.listenForLogs()
+	return m, tea.Batch(m.listenForLogs(), m.listenForPackageProgress())
 }
 
 // viewInstallComplete shows the installation complete screen

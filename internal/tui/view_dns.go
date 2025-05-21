@@ -135,9 +135,9 @@ func viewDNSConfig(m Model) string {
 	s.WriteString("\n\n")
 	s.WriteString(m.styles.Bold.Render("Option 2: Create a standalone A record"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("1. Create an 'A' record for unbind.yourdomain.com → " + m.dnsInfo.ExternalIP))
+	s.WriteString(m.styles.Normal.Render("1. Create an 'A' record for yourdomain.com → " + m.dnsInfo.ExternalIP))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("You can choose whatever you like as the unbind host, e.g. yourdomain.com, unbind.yourdomain.com, ub.yourcomain.com"))
+	s.WriteString(m.styles.Normal.Render("This is the domain you'll use to access Unbind."))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Warning.Render(" Note: Not using a wildcard A record will disable automatic domain generation for unbind services"))
 	s.WriteString("\n\n")
@@ -290,6 +290,7 @@ func (m Model) updateDNSValidationState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Always go to registry type selection upon successful DNS validation
 			m.state = StateRegistryTypeSelection
 			m.isLoading = false
+			m.logChan <- "DNS validation successful. Please configure your registry."
 			return m, m.listenForLogs()
 		} else {
 			m.state = StateDNSFailed
@@ -587,6 +588,16 @@ func viewRegistryDomainInput(m Model) string {
 		}
 	}
 
+	// Main domain information
+	if m.dnsInfo.IsWildcard {
+		s.WriteString(m.styles.Bold.Render("Wildcard Domain: "))
+		s.WriteString(m.styles.Normal.Render(m.dnsInfo.Domain))
+	} else {
+		s.WriteString(m.styles.Bold.Render("Main Domain: "))
+		s.WriteString(m.styles.Normal.Render(m.dnsInfo.UnbindDomain))
+	}
+	s.WriteString("\n\n")
+
 	// Registry Domain Configuration instructions
 	s.WriteString(m.styles.Normal.Render("Unbind needs a registry domain that points to your server."))
 	s.WriteString("\n")
@@ -600,7 +611,13 @@ func viewRegistryDomainInput(m Model) string {
 	s.WriteString(m.styles.Subtle.Render("If using Cloudflare, make sure proxy is disabled (grey cloud) for this domain."))
 	s.WriteString("\n\n")
 
-	// Registry Domain input field
+	// Registry Domain input field with suggestion
+	if m.dnsInfo.IsWildcard {
+		m.registryInput.Placeholder = "unbind-registry." + strings.TrimPrefix(m.dnsInfo.Domain, "*.")
+	} else {
+		m.registryInput.Placeholder = "registry." + m.dnsInfo.UnbindDomain
+	}
+
 	registryInput := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#009900")).
@@ -612,9 +629,16 @@ func viewRegistryDomainInput(m Model) string {
 	s.WriteString(m.styles.Subtle.Render("Enter your registry domain (e.g. registry.yourdomain.com)"))
 	s.WriteString("\n\n")
 
-	// Continue button
-	continuePrompt := m.styles.HighlightButton.Render(" Press Enter to validate registry domain ")
-	s.WriteString(continuePrompt)
+	// Navigation hints
+	s.WriteString(m.styles.Bold.Render("Navigation:"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("Enter"))
+	s.WriteString(m.styles.Normal.Render(" to validate domain"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("b"))
+	s.WriteString(m.styles.Normal.Render(" to go back to registry type selection"))
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
@@ -626,6 +650,13 @@ func viewRegistryDomainInput(m Model) string {
 // updateRegistryDomainInputState handles updates in the registry domain input state
 func (m Model) updateRegistryDomainInputState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	// Check if back button was pressed
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" {
+		// Go back to registry type selection
+		m.state = StateRegistryTypeSelection
+		return m, m.listenForLogs()
+	}
 
 	// Handle text input updates
 	m.registryInput, cmd = m.registryInput.Update(msg)
@@ -846,7 +877,20 @@ func viewRegistryTypeSelection(m Model) string {
 	s.WriteString(m.styles.Subtle.Render("   - Requires existing account credentials"))
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.HighlightButton.Render(" Press 1 for Self-hosted or 2 for External Registry "))
+	// Navigation hints
+	s.WriteString(m.styles.Bold.Render("Navigation:"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("1"))
+	s.WriteString(m.styles.Normal.Render(" for Self-hosted Registry"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("2"))
+	s.WriteString(m.styles.Normal.Render(" for External Registry"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("b"))
+	s.WriteString(m.styles.Normal.Render(" to go back to DNS configuration"))
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
@@ -879,6 +923,12 @@ func (m Model) updateRegistryTypeSelectionState(msg tea.Msg) (tea.Model, tea.Cmd
 			m.dnsInfo.DisableLocalRegistry = true
 			m.state = StateExternalRegistryInput
 			m.usernameInput.Focus()
+			return m, m.listenForLogs()
+
+		case "b":
+			// Go back to DNS configuration
+			m.state = StateDNSConfig
+			m.domainInput.Focus()
 			return m, m.listenForLogs()
 		}
 	}
@@ -934,9 +984,20 @@ func viewExternalRegistryInput(m Model) string {
 	s.WriteString(m.styles.Subtle.Render("We'll validate these credentials before proceeding"))
 	s.WriteString("\n\n")
 
-	// Continue button
-	continuePrompt := m.styles.HighlightButton.Render(" Press Enter to validate credentials ")
-	s.WriteString(continuePrompt)
+	// Navigation hints
+	s.WriteString(m.styles.Bold.Render("Navigation:"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("Tab"))
+	s.WriteString(m.styles.Normal.Render(" to switch between fields"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("Enter"))
+	s.WriteString(m.styles.Normal.Render(" to validate credentials"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("b"))
+	s.WriteString(m.styles.Normal.Render(" to go back to registry type selection"))
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
@@ -948,6 +1009,13 @@ func viewExternalRegistryInput(m Model) string {
 // updateExternalRegistryInputState handles updates in the external registry input state
 func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	// Check if back button was pressed
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" {
+		// Go back to registry type selection
+		m.state = StateRegistryTypeSelection
+		return m, m.listenForLogs()
+	}
 
 	// Check if tab was pressed
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "tab" {
