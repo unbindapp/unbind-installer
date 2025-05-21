@@ -42,6 +42,8 @@ type Model struct {
 	dnsInfo       *dnsInfo
 	domainInput   textinput.Model
 	registryInput textinput.Model
+	usernameInput textinput.Model
+	passwordInput textinput.Model
 
 	// Kube client
 	kubeConfig      string
@@ -78,6 +80,10 @@ func NewModel(version string) Model {
 	// Initialize registry input
 	registryInput := initializeRegistryInput()
 
+	// Initialize username and password inputs
+	usernameInput := initializeUsernameInput()
+	passwordInput := initializePasswordInput()
+
 	// Initialize swap input
 	swapInput := textinput.New()
 	swapInput.Placeholder = "e.g., 4"
@@ -112,6 +118,8 @@ func NewModel(version string) Model {
 		},
 		domainInput:   domainInput,
 		registryInput: registryInput,
+		usernameInput: usernameInput,
+		passwordInput: passwordInput,
 		swapSizeInput: swapInput,
 	}
 }
@@ -201,10 +209,16 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = self.updateDNSSuccessState(msg)
 	case StateDNSFailed:
 		model, cmd = self.updateDNSFailedState(msg)
+	case StateRegistryTypeSelection:
+		model, cmd = self.updateRegistryTypeSelectionState(msg)
 	case StateRegistryDomainInput:
 		model, cmd = self.updateRegistryDomainInputState(msg)
 	case StateRegistryDNSValidation:
 		model, cmd = self.updateRegistryDNSValidationState(msg)
+	case StateExternalRegistryInput:
+		model, cmd = self.updateExternalRegistryInputState(msg)
+	case StateExternalRegistryValidation:
+		model, cmd = self.updateExternalRegistryValidationState(msg)
 	case StateError:
 		model, cmd = self.updateErrorState(msg)
 	case StateInstallingK3S:
@@ -278,10 +292,16 @@ func (self Model) View() string {
 		return viewInstallingUnbind(self)
 	case StateInstallationComplete:
 		return viewInstallationComplete(self)
+	case StateRegistryTypeSelection:
+		return viewRegistryTypeSelection(self)
 	case StateRegistryDomainInput:
 		return viewRegistryDomainInput(self)
 	case StateRegistryDNSValidation:
 		return viewRegistryDNSValidation(self)
+	case StateExternalRegistryInput:
+		return viewExternalRegistryInput(self)
+	case StateExternalRegistryValidation:
+		return viewExternalRegistryValidation(self)
 	default:
 		return viewWelcome(self)
 	}

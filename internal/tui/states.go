@@ -27,11 +27,22 @@ const (
 	StateDNSValidation
 	StateDNSSuccess
 	StateDNSFailed
+	StateRegistryTypeSelection
 	StateRegistryDomainInput
 	StateRegistryDNSValidation
+	StateExternalRegistryInput
+	StateExternalRegistryValidation
 	StateInstallingK3S
 	StateInstallingUnbind
 	StateInstallationComplete
+)
+
+// Registry type enum
+type RegistryType int
+
+const (
+	RegistrySelfHosted RegistryType = iota // Self-hosted registry
+	RegistryExternal                       // External registry like Docker Hub
 )
 
 // Additional model fields for DNS setup
@@ -49,4 +60,11 @@ type dnsInfo struct {
 	RegistryIssue      bool
 	TestingStartTime   time.Time
 	ValidationDuration time.Duration
+
+	// Registry configuration
+	RegistryType         RegistryType
+	RegistryUsername     string
+	RegistryPassword     string
+	RegistryHost         string
+	DisableLocalRegistry bool
 }

@@ -84,3 +84,8 @@ type k3sUninstallCompleteMsg struct {
 // * Dependencies
 // unbindInstallCompleteMsg is sent when all dependencies are installed
 type unbindInstallCompleteMsg struct{}
+
+// registryValidationCompleteMsg is sent when registry credential validation completes
+type registryValidationCompleteMsg struct {
+	success bool
+}

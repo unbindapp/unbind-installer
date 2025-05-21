@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -341,12 +342,31 @@ func (self Model) installUnbind() tea.Cmd {
 
 		// Install Unbind
 		opts := unbindInstaller.SyncHelmfileOptions{
-			UnbindDomain:         self.dnsInfo.UnbindDomain,
-			UnbindRegistryDomain: self.dnsInfo.RegistryDomain,
+			UnbindDomain: self.dnsInfo.UnbindDomain,
 		}
+
+		// Handle different registry configurations
+		if self.dnsInfo.RegistryType == RegistrySelfHosted {
+			// Self-hosted registry
+			opts.UnbindRegistryDomain = self.dnsInfo.RegistryDomain
+			opts.DisableRegistry = false
+			self.log("Using self-hosted registry at: " + self.dnsInfo.RegistryDomain)
+		} else {
+			// External registry
+			opts.RegistryUsername = self.dnsInfo.RegistryUsername
+			opts.RegistryPassword = self.dnsInfo.RegistryPassword
+			opts.RegistryHost = self.dnsInfo.RegistryHost
+			opts.DisableRegistry = true
+			self.log(fmt.Sprintf("Using external registry %s with account: %s",
+				self.dnsInfo.RegistryHost,
+				self.dnsInfo.RegistryUsername))
+		}
+
+		// Set base domain if using wildcard
 		if self.dnsInfo.IsWildcard {
 			opts.BaseDomain = self.dnsInfo.Domain
 		}
+
 		err := self.unbindInstaller.SyncHelmfileWithSteps(ctx, opts)
 		if err != nil {
 			self.log(fmt.Sprintf("Unbind installation failed: %s", err.Error()))
@@ -359,4 +379,85 @@ func (self Model) installUnbind() tea.Cmd {
 
 func (self Model) log(msg string) {
 	self.logChan <- msg
+}
+
+// validateRegistryCredentials checks if the provided Docker registry credentials are valid
+func (self Model) validateRegistryCredentials() tea.Cmd {
+	return func() tea.Msg {
+		if self.dnsInfo == nil || self.dnsInfo.RegistryUsername == "" || self.dnsInfo.RegistryPassword == "" {
+			return errMsg{err: nil}
+		}
+
+		username := self.dnsInfo.RegistryUsername
+		password := self.dnsInfo.RegistryPassword
+		host := self.dnsInfo.RegistryHost
+
+		self.log(fmt.Sprintf("Validating registry credentials for %s on %s...", username, host))
+
+		// Registry-specific authentication method
+		var authURL string
+		var client *http.Client
+		var req *http.Request
+		var err error
+
+		// Default is Docker Hub
+		if host == "docker.io" {
+			// Docker Hub authentication URL
+			authURL = "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/alpine:pull"
+
+			// Create HTTP client
+			client = &http.Client{
+				Timeout: 10 * time.Second,
+			}
+
+			// Create the request
+			req, err = http.NewRequest("GET", authURL, nil)
+			if err != nil {
+				self.log(fmt.Sprintf("Error creating request: %s", err.Error()))
+				return registryValidationCompleteMsg{success: false}
+			}
+
+			// Add basic auth header
+			req.SetBasicAuth(username, password)
+		} else {
+			// Generic registry API check
+			self.log(fmt.Sprintf("Using generic authentication for %s", host))
+
+			// Use the catalog endpoint as a generic check
+			authURL = fmt.Sprintf("https://%s/v2/_catalog", host)
+
+			// Create HTTP client
+			client = &http.Client{
+				Timeout: 10 * time.Second,
+			}
+
+			// Create the request
+			req, err = http.NewRequest("GET", authURL, nil)
+			if err != nil {
+				self.log(fmt.Sprintf("Error creating request: %s", err.Error()))
+				return registryValidationCompleteMsg{success: false}
+			}
+
+			// Add basic auth header
+			req.SetBasicAuth(username, password)
+		}
+
+		// Make the request
+		self.log(fmt.Sprintf("Connecting to %s...", host))
+		resp, err := client.Do(req)
+		if err != nil {
+			self.log(fmt.Sprintf("Connection error: %s", err.Error()))
+			return registryValidationCompleteMsg{success: false}
+		}
+		defer resp.Body.Close()
+
+		// Check response status
+		if resp.StatusCode == 200 || resp.StatusCode == 401 && resp.Header.Get("Www-Authenticate") != "" {
+			self.log("Authentication successful!")
+			return registryValidationCompleteMsg{success: true}
+		} else {
+			self.log(fmt.Sprintf("Authentication failed with status: %d", resp.StatusCode))
+			return registryValidationCompleteMsg{success: false}
+		}
+	}
 }

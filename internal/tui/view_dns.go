@@ -287,27 +287,10 @@ func (m Model) updateDNSValidationState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dnsInfo.ValidationDuration = time.Since(m.dnsInfo.TestingStartTime)
 
 		if msg.success {
-			// If DNS validation successful
-
-			// Check if we need to get registry domain input
-			if m.dnsInfo.RegistryDomain == "" {
-				m.state = StateRegistryDomainInput
-				m.isLoading = false
-				m.registryInput.Focus()
-				return m, m.listenForLogs()
-			}
-
-			// Otherwise proceed to success
-			m.state = StateDNSSuccess
+			// Always go to registry type selection upon successful DNS validation
+			m.state = StateRegistryTypeSelection
 			m.isLoading = false
-
-			// Schedule automatic advancement after 1 second
-			return m, tea.Batch(
-				m.listenForLogs(),
-				tea.Tick(1*time.Second, func(time.Time) tea.Msg {
-					return autoAdvanceMsg{}
-				}),
-			)
+			return m, m.listenForLogs()
 		} else {
 			m.state = StateDNSFailed
 			m.isLoading = false
@@ -339,32 +322,54 @@ func viewDNSSuccess(m Model) string {
 	s.WriteString("\n\n")
 
 	// Success message
-	s.WriteString(m.styles.Success.Render("✓ DNS Configuration Successful!"))
+	s.WriteString(m.styles.Success.Render("✓ Configuration Successful!"))
 	s.WriteString("\n\n")
 
-	// Success details
+	// DNS Configuration details
+	s.WriteString(m.styles.Bold.Render("DNS Configuration:"))
+	s.WriteString("\n")
+
 	if m.dnsInfo.CloudflareDetected {
-		s.WriteString(m.styles.Bold.Render("Cloudflare detected: "))
+		s.WriteString(m.styles.Normal.Render("• Cloudflare detected: "))
 		s.WriteString(m.styles.Success.Render("Yes"))
 		s.WriteString("\n")
 		if m.dnsInfo.IsWildcard {
-			s.WriteString(m.styles.Normal.Render("Your wildcard domain is configured correctly with Cloudflare."))
+			s.WriteString(m.styles.Normal.Render("• Wildcard domain configured correctly with Cloudflare"))
 		} else {
-			s.WriteString(m.styles.Normal.Render("Your domains are configured correctly with Cloudflare."))
+			s.WriteString(m.styles.Normal.Render("• Domains configured correctly with Cloudflare"))
 		}
 	} else {
 		s.WriteString(m.styles.Bold.Render("Configured domains:"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.UnbindDomain))
-		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.RegistryDomain))
+		s.WriteString(m.styles.Normal.Render("• " + m.dnsInfo.UnbindDomain))
 		s.WriteString("\n")
 		if m.dnsInfo.IsWildcard {
-			s.WriteString(m.styles.Normal.Render("  • " + m.dnsInfo.Domain + " (wildcard)"))
+			s.WriteString(m.styles.Normal.Render("• " + m.dnsInfo.Domain + " (wildcard)"))
 			s.WriteString("\n")
 		}
 		s.WriteString(m.styles.Bold.Render("Points to: "))
 		s.WriteString(m.styles.Normal.Render(m.dnsInfo.ExternalIP))
+	}
+
+	// Registry Configuration details
+	s.WriteString("\n\n")
+	s.WriteString(m.styles.Bold.Render("Registry Configuration:"))
+	s.WriteString("\n")
+
+	if m.dnsInfo.RegistryType == RegistrySelfHosted {
+		s.WriteString(m.styles.Normal.Render("• Self-hosted registry configured at:"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Success.Render("  " + m.dnsInfo.RegistryDomain))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("• Registry will be deployed as part of Unbind installation"))
+	} else {
+		s.WriteString(m.styles.Normal.Render("• External registry configured:"))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Success.Render(fmt.Sprintf("  %s account: %s",
+			getRegistryDisplayName(m.dnsInfo.RegistryHost),
+			m.dnsInfo.RegistryUsername)))
+		s.WriteString("\n")
+		s.WriteString(m.styles.Normal.Render("• Local registry component will be disabled"))
 	}
 
 	// Validation details
@@ -372,7 +377,7 @@ func viewDNSSuccess(m Model) string {
 	s.WriteString(m.styles.Subtle.Render(fmt.Sprintf("Validation completed in %.1f seconds", m.dnsInfo.ValidationDuration.Seconds())))
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Normal.Render("Your DNS configuration is working correctly and Unbind can proceed with installation."))
+	s.WriteString(m.styles.Normal.Render("Your configuration is complete and Unbind can proceed with installation."))
 	s.WriteString("\n\n")
 
 	// Continue button
@@ -789,4 +794,319 @@ func (m Model) updateRegistryDNSValidationState(msg tea.Msg) (tea.Model, tea.Cmd
 	}
 
 	return m, m.listenForLogs()
+}
+
+// initializeUsernameInput initializes the text input for registry username entry
+func initializeUsernameInput() textinput.Model {
+	ti := textinput.New()
+	ti.Placeholder = "username"
+	ti.Width = 30
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#009900"))
+	return ti
+}
+
+// initializePasswordInput initializes the text input for registry password entry
+func initializePasswordInput() textinput.Model {
+	ti := textinput.New()
+	ti.Placeholder = "password"
+	ti.Width = 30
+	ti.EchoMode = textinput.EchoPassword
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#009900"))
+	return ti
+}
+
+// viewRegistryTypeSelection shows a view for selecting registry type
+func viewRegistryTypeSelection(m Model) string {
+	s := strings.Builder{}
+
+	// Banner
+	s.WriteString(getBanner())
+	s.WriteString("\n\n")
+
+	// Instructions
+	s.WriteString(m.styles.Bold.Render("Select Registry Type for Unbind"))
+	s.WriteString("\n\n")
+
+	s.WriteString(m.styles.Normal.Render("Unbind requires a container registry to store Docker images. You can:"))
+	s.WriteString("\n\n")
+
+	// Option 1: Self-hosted
+	s.WriteString(m.styles.Bold.Render("1. Self-hosted Registry"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("   Allow Unbind to install a registry on your server"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Subtle.Render("   - Requires DNS name pointing to your server"))
+	s.WriteString("\n\n")
+
+	// Option 2: External registry
+	s.WriteString(m.styles.Bold.Render("2. External Registry"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("   Use Docker Hub, GHCR, Quay, or another registry service"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Subtle.Render("   - Requires existing account credentials"))
+	s.WriteString("\n\n")
+
+	s.WriteString(m.styles.HighlightButton.Render(" Press 1 for Self-hosted or 2 for External Registry "))
+	s.WriteString("\n\n")
+
+	// Status bar at the bottom
+	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+
+	return s.String()
+}
+
+// updateRegistryTypeSelectionState handles selection of registry type
+func (m Model) updateRegistryTypeSelectionState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case "1":
+			// Self-hosted registry selected
+			if m.dnsInfo == nil {
+				m.dnsInfo = &dnsInfo{}
+			}
+			m.dnsInfo.RegistryType = RegistrySelfHosted
+			m.dnsInfo.DisableLocalRegistry = false
+			m.state = StateRegistryDomainInput
+			m.registryInput.Focus()
+			return m, m.listenForLogs()
+
+		case "2":
+			// External registry selected
+			if m.dnsInfo == nil {
+				m.dnsInfo = &dnsInfo{}
+			}
+			m.dnsInfo.RegistryType = RegistryExternal
+			m.dnsInfo.DisableLocalRegistry = true
+			m.state = StateExternalRegistryInput
+			m.usernameInput.Focus()
+			return m, m.listenForLogs()
+		}
+	}
+
+	if _, ok := msg.(tea.WindowSizeMsg); ok {
+		// Handle window size changes
+		return m, m.listenForLogs()
+	}
+
+	return m, m.listenForLogs()
+}
+
+// viewExternalRegistryInput shows the input screen for external registry credentials
+func viewExternalRegistryInput(m Model) string {
+	s := strings.Builder{}
+
+	// Banner
+	s.WriteString(getBanner())
+	s.WriteString("\n\n")
+
+	// Instructions
+	s.WriteString(m.styles.Bold.Render("Enter External Registry Credentials"))
+	s.WriteString("\n\n")
+
+	s.WriteString(m.styles.Normal.Render("Please enter your registry credentials:"))
+	s.WriteString("\n\n")
+
+	// Default registry host explanation
+	s.WriteString(m.styles.Bold.Render("Registry: "))
+	s.WriteString(m.styles.Normal.Render("Docker Hub (docker.io)"))
+	s.WriteString("\n\n")
+
+	// Username input field
+	usernameInput := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#009900")).
+		Padding(0, 1).
+		Render(fmt.Sprintf("Username: %s", m.usernameInput.View()))
+
+	s.WriteString(usernameInput)
+	s.WriteString("\n\n")
+
+	// Password input field
+	passwordInput := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#009900")).
+		Padding(0, 1).
+		Render(fmt.Sprintf("Password: %s", m.passwordInput.View()))
+
+	s.WriteString(passwordInput)
+	s.WriteString("\n\n")
+
+	s.WriteString(m.styles.Subtle.Render("We'll validate these credentials before proceeding"))
+	s.WriteString("\n\n")
+
+	// Continue button
+	continuePrompt := m.styles.HighlightButton.Render(" Press Enter to validate credentials ")
+	s.WriteString(continuePrompt)
+	s.WriteString("\n\n")
+
+	// Status bar at the bottom
+	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+
+	return s.String()
+}
+
+// updateExternalRegistryInputState handles updates in the external registry input state
+func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	// Check if tab was pressed
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "tab" {
+		// Toggle focus between inputs
+		if m.usernameInput.Focused() {
+			m.usernameInput.Blur()
+			m.passwordInput.Focus()
+		} else {
+			m.passwordInput.Blur()
+			m.usernameInput.Focus()
+		}
+		return m, nil
+	}
+
+	// Update the focused input
+	if m.usernameInput.Focused() {
+		m.usernameInput, cmd = m.usernameInput.Update(msg)
+	} else {
+		m.passwordInput, cmd = m.passwordInput.Update(msg)
+	}
+
+	// Store the values
+	if m.dnsInfo == nil {
+		m.dnsInfo = &dnsInfo{}
+	}
+	m.dnsInfo.RegistryUsername = m.usernameInput.Value()
+	m.dnsInfo.RegistryPassword = m.passwordInput.Value()
+	m.dnsInfo.RegistryHost = "docker.io" // Default registry host
+
+	// If Enter was pressed with valid credentials, start validation
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
+		if m.dnsInfo.RegistryUsername != "" && m.dnsInfo.RegistryPassword != "" {
+			m.state = StateExternalRegistryValidation
+			m.isLoading = true
+			m.dnsInfo.TestingStartTime = time.Now()
+
+			return m, tea.Batch(
+				m.spinner.Tick,
+				m.validateRegistryCredentials(),
+				m.listenForLogs(),
+			)
+		}
+	}
+
+	if _, ok := msg.(tea.WindowSizeMsg); ok {
+		// Handle window size changes
+		return m, tea.Batch(cmd, m.listenForLogs())
+	}
+
+	// For any other message, keep updating the input and listening for logs
+	return m, tea.Batch(cmd, m.listenForLogs())
+}
+
+// viewExternalRegistryValidation shows validation of external registry credentials
+func viewExternalRegistryValidation(m Model) string {
+	s := strings.Builder{}
+
+	// Banner
+	s.WriteString(getBanner())
+	s.WriteString("\n\n")
+
+	// Show current action
+	s.WriteString(m.spinner.View())
+	s.WriteString(" ")
+	s.WriteString(m.styles.Bold.Render("Validating Registry Credentials..."))
+	s.WriteString("\n\n")
+
+	// Display what we're testing
+	s.WriteString(m.styles.Bold.Render("Verifying:"))
+	s.WriteString("\n")
+	s.WriteString(fmt.Sprintf("  • Username: %s\n", m.styles.Normal.Render(m.dnsInfo.RegistryUsername)))
+	s.WriteString(fmt.Sprintf("  • Registry: %s\n", m.styles.Normal.Render("Docker Hub (docker.io)")))
+	s.WriteString("\n")
+
+	// Process logs
+	if len(m.logMessages) > 0 {
+		s.WriteString(m.styles.Bold.Render("Connection logs:"))
+		s.WriteString("\n")
+
+		// Show the last few log messages
+		startIdx := 0
+		if len(m.logMessages) > 8 {
+			startIdx = len(m.logMessages) - 8
+		}
+
+		for _, msg := range m.logMessages[startIdx:] {
+			// Truncate the message if it's too long
+			const maxLength = 80 // Reasonable terminal width
+
+			displayMsg := msg
+			if len(msg) > maxLength {
+				displayMsg = msg[:maxLength-3] + "..."
+			}
+
+			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
+		}
+	}
+
+	// Status bar at the bottom
+	s.WriteString("\n")
+	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+
+	return s.String()
+}
+
+// updateExternalRegistryValidationState handles updates in the external registry validation state
+func (m Model) updateExternalRegistryValidationState(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, tea.Batch(cmd, m.listenForLogs())
+
+	case registryValidationCompleteMsg:
+		m.dnsInfo.ValidationDuration = time.Since(m.dnsInfo.TestingStartTime)
+
+		if msg.success {
+			// If registry validation is successful, proceed to success state
+			m.state = StateDNSSuccess
+			m.isLoading = false
+
+			// Schedule automatic advancement after 1 second
+			return m, tea.Batch(
+				m.listenForLogs(),
+				tea.Tick(1*time.Second, func(time.Time) tea.Msg {
+					return autoAdvanceMsg{}
+				}),
+			)
+		} else {
+			// If validation fails, go back to registry input
+			m.state = StateExternalRegistryInput
+			m.isLoading = false
+			m.logChan <- "Registry credentials validation failed. Please try again."
+
+			// Focus username field
+			m.usernameInput.Focus()
+
+			return m, m.listenForLogs()
+		}
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, m.listenForLogs()
+	}
+
+	return m, m.listenForLogs()
+}
+
+// getRegistryDisplayName returns a user-friendly display name for registry hosts
+func getRegistryDisplayName(host string) string {
+	switch host {
+	case "docker.io":
+		return "Docker Hub"
+	case "ghcr.io":
+		return "GitHub Container Registry"
+	case "quay.io":
+		return "Red Hat Quay"
+	default:
+		return host
+	}
 }

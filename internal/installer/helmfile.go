@@ -20,6 +20,12 @@ type SyncHelmfileOptions struct {
 	UnbindRegistryDomain string
 	AdditionalValues     map[string]interface{}
 	RepoURL              string
+
+	// Registry configuration
+	DisableRegistry  bool   // Whether to disable the local registry component
+	RegistryUsername string // External registry username
+	RegistryPassword string // External registry password
+	RegistryHost     string // External registry host
 }
 
 // SyncHelmfileWithSteps performs a helmfile sync operation using the unbind-charts repository
@@ -108,6 +114,31 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					"--state-values-set", "unbindDomain=" + opts.UnbindDomain,
 					"--state-values-set", "unbindRegistryDomain=" + opts.UnbindRegistryDomain,
 					"--state-values-set", "wildcardBaseDomain=" + opts.BaseDomain,
+				}
+
+				// Add registry configuration options
+				if opts.DisableRegistry {
+					// Configure external registry
+					args = append(args, "--state-values-set", "externalRegistry.enabled=true")
+
+					// Set host if provided, default to docker.io
+					registryHost := "docker.io"
+					if opts.RegistryHost != "" {
+						registryHost = opts.RegistryHost
+					}
+					args = append(args, "--state-values-set", "externalRegistry.host="+registryHost)
+
+					// Add registry credentials if using external registry
+					if opts.RegistryUsername != "" {
+						args = append(args, "--state-values-set", "externalRegistry.username="+opts.RegistryUsername)
+					}
+
+					if opts.RegistryPassword != "" {
+						args = append(args, "--state-values-set", "externalRegistry.password="+opts.RegistryPassword)
+					}
+				} else {
+					// Use self-hosted registry
+					args = append(args, "--state-values-set", "externalRegistry.enabled=false")
 				}
 
 				// Add any additional values if present
