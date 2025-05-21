@@ -139,11 +139,18 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForK3SProgress())
 
 	case k3s.K3SUpdateMessage:
-		// Log that we received a progress update (for debugging)
-		m.logMessages = append(m.logMessages,
-			"K3S installation progress: "+fmt.Sprintf("%.1f%%", msg.Progress*100)+
-				" - Status: "+string(msg.Status)+
-				" - Step: "+msg.Description)
+		// Store the progress update in model
+		m.k3sProgress = msg
+
+		// Log only significant progress updates to reduce logging overhead
+		if msg.Progress == 0 || msg.Progress >= 0.25 && msg.Progress < 0.26 ||
+			msg.Progress >= 0.5 && msg.Progress < 0.51 || msg.Progress >= 0.75 && msg.Progress < 0.76 ||
+			msg.Progress == 1.0 || msg.Status == "completed" || msg.Status == "failed" {
+			m.logMessages = append(m.logMessages,
+				"K3S installation progress: "+fmt.Sprintf("%.1f%%", msg.Progress*100)+
+					" - Status: "+string(msg.Status)+
+					" - Step: "+msg.Description)
+		}
 
 		// Update the K3S installation status
 		m.updateK3SInstall(msg)
@@ -188,6 +195,10 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
+
+	case nil:
+		// Handle nil messages from optimized progress listener
 		return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
 	}
 

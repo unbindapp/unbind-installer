@@ -334,11 +334,11 @@ func (self Model) listenForK3SProgress() tea.Cmd {
 				// Channel closed
 				return nil
 			}
-			self.k3sProgress = msg
 			return msg
 		default:
-			// Don't block if no message is available
-			return tickMsg{} // A dummy message to keep the command running
+			// Sleep a bit to reduce CPU usage when no messages are available
+			time.Sleep(50 * time.Millisecond)
+			return nil
 		}
 	}
 }
@@ -348,6 +348,24 @@ func (self Model) listenForPackageProgress() tea.Cmd {
 	return func() tea.Msg {
 		select {
 		case msg, ok := <-self.packageProgressChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+			return msg
+		default:
+			// Sleep a bit to reduce CPU usage when no messages are available
+			time.Sleep(50 * time.Millisecond)
+			return nil
+		}
+	}
+}
+
+// listenForUnbindProgress returns a command that listens for unbind installation progress
+func (self Model) listenForUnbindProgress() tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg, ok := <-self.unbindProgressChan:
 			if !ok {
 				// Channel closed
 				return nil

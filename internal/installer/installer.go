@@ -142,6 +142,10 @@ type UnbindInstallUpdateMsg struct {
 // DependencyInstallCompleteMsg is sent when all dependencies are installed
 type DependencyInstallCompleteMsg struct{}
 
+// Last time we sent a progress update for each dependency
+var lastProgressUpdateTimes = make(map[string]time.Time)
+var minProgressInterval = 500 * time.Millisecond
+
 // logProgress unifies logging, state tracking, and progress updates
 func (self *UnbindInstaller) logProgress(name string, progress float64, description string, err error, status InstallerStatus) {
 	// Ensure state is initialized
@@ -190,6 +194,7 @@ func (self *UnbindInstaller) sendUpdateMessage(name string) {
 		return
 	}
 
+	// Create message from current state
 	msg := UnbindInstallUpdateMsg{
 		Name:        name,
 		Status:      state.status,
@@ -198,10 +203,27 @@ func (self *UnbindInstaller) sendUpdateMessage(name string) {
 		Error:       state.error,
 		StartTime:   state.startTime,
 		EndTime:     state.endTime,
-		StepHistory: append([]string{}, state.stepHistory...), // Make a copy of the history
+		StepHistory: make([]string, len(state.stepHistory)), // Make a copy to avoid mutation issues
 	}
+	copy(msg.StepHistory, state.stepHistory)
 
-	self.progressChan <- msg
+	// Throttle update sending to reduce UI thrashing
+	now := time.Now()
+	lastUpdate, exists := lastProgressUpdateTimes[name]
+
+	// Always send messages when:
+	// 1. It's the first message for this dependency
+	// 2. Status has changed (especially to completed or failed)
+	// 3. There's an error
+	// 4. It's been at least minProgressInterval since the last update
+	if !exists ||
+		state.status != StatusInstalling ||
+		state.error != nil ||
+		now.Sub(lastUpdate) >= minProgressInterval {
+
+		lastProgressUpdateTimes[name] = now
+		self.progressChan <- msg
+	}
 }
 
 // log sends a message to the log channel if available

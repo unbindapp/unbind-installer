@@ -59,10 +59,14 @@ func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage) *In
 	return inst
 }
 
+// Last time we sent a progress update
+var lastProgressUpdateTime time.Time
+var minProgressInterval = 500 * time.Millisecond
+
 // logProgress sends a log message, progress update, and update message
 func (self *Installer) logProgress(progress float64, status string, description string, err error) {
-	// Send log message
-	if description != "" {
+	// Send log message only if it's a new description
+	if description != "" && description != self.state.lastMsg.Description {
 		self.log(description)
 	}
 
@@ -76,8 +80,17 @@ func (self *Installer) logProgress(progress float64, status string, description 
 		self.state.status = status
 	}
 
-	// Send detailed update message
-	self.sendUpdateMessage(progress, status, description, err)
+	// Only send updates when they're significant to prevent overwhelming the UI
+	shouldSendUpdate := (err != nil) || // Always send errors
+		(status != self.state.lastMsg.Status) || // Status changed
+		(description != "" && description != self.state.lastMsg.Description) || // New step description
+		(progress-self.state.lastMsg.Progress >= 0.05) || // Progress increased by at least 5%
+		(progress == 1.0 && self.state.lastMsg.Progress != 1.0) // Final completion
+
+	if shouldSendUpdate {
+		// Send detailed update message
+		self.sendUpdateMessage(progress, status, description, err)
+	}
 }
 
 // log sends a message to the log channel if available
@@ -96,13 +109,36 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 		Error:       err,
 		StartTime:   self.state.startTime,
 		EndTime:     self.state.endTime,
+		StepHistory: self.state.lastMsg.StepHistory,
 	}
 
-	self.state.lastMsg = msg
-
-	if self.UpdateChan != nil {
-		self.UpdateChan <- msg
+	// Add to step history if it's a new description
+	if description != "" && !contains(msg.StepHistory, description) {
+		msg.StepHistory = append(msg.StepHistory, description)
 	}
+
+	// Throttle update sending
+	now := time.Now()
+	if now.Sub(lastProgressUpdateTime) >= minProgressInterval ||
+		status == "completed" || status == "failed" || status != self.state.lastMsg.Status {
+
+		self.state.lastMsg = msg
+		lastProgressUpdateTime = now
+
+		if self.UpdateChan != nil {
+			self.UpdateChan <- msg
+		}
+	}
+}
+
+// contains checks if a string is in a slice
+func contains(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
 }
 
 // Install installs K3S using a step-based approach with progress tracking

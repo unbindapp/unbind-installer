@@ -11,23 +11,6 @@ import (
 	"github.com/unbindapp/unbind-installer/internal/installer"
 )
 
-// listenForProgress returns a command that listens for progress updates
-func (self Model) listenForUnbindProgress() tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case msg, ok := <-self.unbindProgressChan:
-			if !ok {
-				// Channel closed
-				return nil
-			}
-			return msg
-		default:
-			// Don't block if no message is available
-			return nil
-		}
-	}
-}
-
 // viewInstallingUnbind shows the Unbind installation screen with progress tracking
 func viewInstallingUnbind(m Model) string {
 	s := strings.Builder{}
@@ -156,11 +139,18 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForUnbindProgress())
 
 	case installer.UnbindInstallUpdateMsg:
-		// Log that we received a progress update (for debugging)
-		m.logMessages = append(m.logMessages,
-			"Unbind installation progress: "+fmt.Sprintf("%.1f%%", msg.Progress*100)+
-				" - Status: "+string(msg.Status)+
-				" - Step: "+msg.Description)
+		// Store the progress update in model
+		m.unbindProgress = msg
+
+		// Log only significant progress updates to reduce logging overhead
+		if msg.Progress == 0 || msg.Progress >= 0.25 && msg.Progress < 0.26 ||
+			msg.Progress >= 0.5 && msg.Progress < 0.51 || msg.Progress >= 0.75 && msg.Progress < 0.76 ||
+			msg.Progress == 1.0 || msg.Status == "completed" || msg.Status == "failed" {
+			m.logMessages = append(m.logMessages,
+				"Unbind installation progress: "+fmt.Sprintf("%.1f%%", msg.Progress*100)+
+					" - Status: "+string(msg.Status)+
+					" - Step: "+msg.Description)
+		}
 
 		// Update the Unbind installation status
 		m.updateUnbindInstall(msg)
@@ -198,6 +188,10 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, tea.Batch(m.listenForLogs(), m.listenForUnbindProgress())
+
+	case nil:
+		// Handle nil messages from optimized progress listener
 		return m, tea.Batch(m.listenForLogs(), m.listenForUnbindProgress())
 	}
 
