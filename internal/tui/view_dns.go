@@ -962,33 +962,33 @@ func viewExternalRegistryInput(m Model) string {
 
 	// Docker Hub
 	if m.selectedRegistry == 0 {
-		s.WriteString(m.styles.SelectedOption.Render("→ [1] Docker Hub (docker.io)"))
+		s.WriteString(m.styles.SelectedOption.Render("→ [F1] Docker Hub (docker.io)"))
 	} else {
-		s.WriteString(m.styles.Normal.Render("  [1] Docker Hub (docker.io)"))
+		s.WriteString(m.styles.Normal.Render("  [F1] Docker Hub (docker.io)"))
 	}
 	s.WriteString("\n")
 
 	// GitHub Container Registry
 	if m.selectedRegistry == 1 {
-		s.WriteString(m.styles.SelectedOption.Render("→ [2] GitHub Container Registry (ghcr.io)"))
+		s.WriteString(m.styles.SelectedOption.Render("→ [F2] GitHub Container Registry (ghcr.io)"))
 	} else {
-		s.WriteString(m.styles.Normal.Render("  [2] GitHub Container Registry (ghcr.io)"))
+		s.WriteString(m.styles.Normal.Render("  [F2] GitHub Container Registry (ghcr.io)"))
 	}
 	s.WriteString("\n")
 
 	// Red Hat Quay
 	if m.selectedRegistry == 2 {
-		s.WriteString(m.styles.SelectedOption.Render("→ [3] Red Hat Quay (quay.io)"))
+		s.WriteString(m.styles.SelectedOption.Render("→ [F3] Red Hat Quay (quay.io)"))
 	} else {
-		s.WriteString(m.styles.Normal.Render("  [3] Red Hat Quay (quay.io)"))
+		s.WriteString(m.styles.Normal.Render("  [F3] Red Hat Quay (quay.io)"))
 	}
 	s.WriteString("\n")
 
 	// Custom Registry
 	if m.selectedRegistry == 3 {
-		s.WriteString(m.styles.SelectedOption.Render("→ [4] Custom Registry"))
+		s.WriteString(m.styles.SelectedOption.Render("→ [F4] Custom Registry"))
 	} else {
-		s.WriteString(m.styles.Normal.Render("  [4] Custom Registry"))
+		s.WriteString(m.styles.Normal.Render("  [F4] Custom Registry"))
 	}
 	s.WriteString("\n\n")
 
@@ -1054,9 +1054,9 @@ func viewExternalRegistryInput(m Model) string {
 	s.WriteString(m.styles.Normal.Render(" to switch between fields"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("Ctrl+1"))
+	s.WriteString(m.styles.Key.Render("F1"))
 	s.WriteString(m.styles.Normal.Render(" through "))
-	s.WriteString(m.styles.Key.Render("Ctrl+4"))
+	s.WriteString(m.styles.Key.Render("F4"))
 	s.WriteString(m.styles.Normal.Render(" to select registry type"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("• Press "))
@@ -1088,42 +1088,18 @@ func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd
 	// Check for registry selection keys
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
-		case "ctrl+1":
+		case "f1":
 			// Docker Hub
 			m.selectedRegistry = 0
-			m.usernameInput.SetValue("")
-			m.passwordInput.SetValue("")
-			m.registryHostInput.SetValue("")
-			m.registryHostInput.Blur()
-			m.usernameInput.Focus()
-			m.passwordInput.Blur()
-		case "ctrl+2":
+		case "f2":
 			// GitHub Container Registry
 			m.selectedRegistry = 1
-			m.usernameInput.SetValue("")
-			m.passwordInput.SetValue("")
-			m.registryHostInput.SetValue("")
-			m.registryHostInput.Blur()
-			m.usernameInput.Focus()
-			m.passwordInput.Blur()
-		case "ctrl+3":
+		case "f3":
 			// Red Hat Quay
 			m.selectedRegistry = 2
-			m.usernameInput.SetValue("")
-			m.passwordInput.SetValue("")
-			m.registryHostInput.SetValue("")
-			m.registryHostInput.Blur()
-			m.usernameInput.Focus()
-			m.passwordInput.Blur()
-		case "ctrl+4":
+		case "f4":
 			// Custom Registry
 			m.selectedRegistry = 3
-			m.registryHostInput.SetValue("")
-			m.usernameInput.SetValue("")
-			m.passwordInput.SetValue("")
-			m.registryHostInput.Focus()
-			m.usernameInput.Blur()
-			m.passwordInput.Blur()
 		}
 	}
 

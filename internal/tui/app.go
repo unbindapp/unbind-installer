@@ -158,7 +158,7 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "ctrl+q", "esc":
 			return self, tea.Quit
 		case "d":
-			if self.state != StateDNSConfig {
+			if self.state != StateDNSConfig && self.state != StateExternalRegistryInput && self.state != StateRegistryDomainInput {
 				// Toggle debug logs view
 				self.showDebugLogs = !self.showDebugLogs
 				return self, nil
