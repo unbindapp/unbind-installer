@@ -95,7 +95,7 @@ func (self Model) installRequiredPackages() tea.Cmd {
 	return func() tea.Msg {
 		// Create a context that we can cancel
 		ctx, cancel := context.WithCancel(context.Background())
-		
+
 		// Create a channel to receive the result
 		resultChan := make(chan tea.Msg, 1)
 

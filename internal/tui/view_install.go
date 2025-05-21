@@ -116,8 +116,7 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Add a small delay to show the completed state first
 			return m, tea.Batch(
 				m.listenForLogs(),
-				m.listenForPackageProgress(),
-				tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+				tea.Tick(800*time.Millisecond, func(time.Time) tea.Msg {
 					return installCompleteMsg{}
 				}),
 			)
@@ -129,10 +128,10 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateInstallComplete
 		m.isLoading = false
 
-		// Schedule automatic advancement after 1 second
+		// Schedule automatic advancement after 1.5 seconds to ensure UI has time to settle
 		return m, tea.Batch(
 			m.listenForLogs(),
-			tea.Tick(1*time.Second, func(time.Time) tea.Msg {
+			tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
 				return autoAdvanceMsg{}
 			}),
 		)
@@ -147,6 +146,10 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, m.listenForLogs()
+
+	case nil:
+		// Handle nil messages (from the optimized progress listener)
+		return m, tea.Batch(m.listenForLogs(), m.listenForPackageProgress())
 	}
 
 	return m, tea.Batch(m.listenForLogs(), m.listenForPackageProgress())

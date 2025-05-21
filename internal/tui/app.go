@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -351,11 +352,11 @@ func (self Model) listenForPackageProgress() tea.Cmd {
 				// Channel closed
 				return nil
 			}
-			self.packageProgress = msg
 			return msg
 		default:
-			// Don't block if no message is available
-			return tickMsg{} // A dummy message to keep the command running
+			// Sleep a bit to reduce CPU usage when no messages are available
+			time.Sleep(50 * time.Millisecond)
+			return nil
 		}
 	}
 }

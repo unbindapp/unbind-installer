@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"time"
 )
 
 // AptInstaller handles installation of apt packages
@@ -25,9 +26,18 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 		return nil
 	}
 
+	// Last time we sent a progress update
+	lastProgressUpdate := time.Now()
+	minProgressInterval := 500 * time.Millisecond
+
 	sendProgress := func(progress float64, step string) {
 		if progressFunc != nil {
-			progressFunc("", progress, step, false)
+			// Throttle progress updates to reduce UI thrashing
+			now := time.Now()
+			if now.Sub(lastProgressUpdate) >= minProgressInterval {
+				progressFunc("", progress, step, false)
+				lastProgressUpdate = now
+			}
 		}
 	}
 
@@ -56,6 +66,10 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 		}
 
 		sendProgress(0.9, "Verifying installation...")
+
+		// Add a small delay to prevent UI thrashing during transition
+		time.Sleep(300 * time.Millisecond)
+
 		done <- nil
 	}()
 
@@ -67,6 +81,7 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 	case err := <-done:
 		if err == nil {
 			if progressFunc != nil {
+				// Ensure we send the final completion status
 				progressFunc("", 1.0, "Installation complete", true)
 			}
 			self.log("Packages installed successfully")
