@@ -28,7 +28,7 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 
 	// Last time we sent a progress update
 	lastProgressUpdate := time.Now()
-	minProgressInterval := 500 * time.Millisecond
+	minProgressInterval := 100 * time.Millisecond // Reduced interval for smoother updates
 
 	sendProgress := func(progress float64, step string) {
 		if progressFunc != nil {
@@ -46,6 +46,8 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 
 	// Start the installation in a goroutine
 	go func() {
+		defer close(done) // Ensure channel is closed when goroutine exits
+
 		// Update package lists
 		sendProgress(0.1, "Updating package lists...")
 		updateCmd := exec.CommandContext(ctx, "apt-get", "update", "-y")
@@ -68,7 +70,13 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 		sendProgress(0.9, "Verifying installation...")
 
 		// Add a small delay to prevent UI thrashing during transition
-		time.Sleep(300 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			// Context cancelled, don't wait
+			return
+		case <-time.After(200 * time.Millisecond):
+			// Delay completed
+		}
 
 		done <- nil
 	}()

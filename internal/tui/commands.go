@@ -16,26 +16,12 @@ import (
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 	"github.com/unbindapp/unbind-installer/internal/pkgmanager"
 	"github.com/unbindapp/unbind-installer/internal/system"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-// listenForLogs returns a command that listens for log messages
+// tickMsg is used to keep the command running
 type tickMsg struct{}
-
-func (self Model) listenForLogs() tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case msg, ok := <-self.logChan:
-			if !ok {
-				// Channel closed
-				return nil
-			}
-			return logMsg{message: msg}
-		default:
-			// Don't block if no message is available
-			return tickMsg{} // A dummy message to keep the command running
-		}
-	}
-}
 
 // checkK3sCommand checks for an existing K3s installation.
 func checkK3sCommand() tea.Cmd {
@@ -95,63 +81,54 @@ func (self Model) installRequiredPackages() tea.Cmd {
 	return func() tea.Msg {
 		// Create a context that we can cancel
 		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel() // Ensure resources are cleaned up
 
-		// Create a channel to receive the result
-		resultChan := make(chan tea.Msg, 1)
+		// Common package names that we need
+		commonPackages := []string{
+			"curl",
+			"wget",
+			"ca-certificates",
+			"apt-transport-https",
+			"apache2-utils",
+		}
 
-		// Start the installation in a goroutine
-		go func() {
-			defer cancel()
+		// Get distribution-specific package names
+		packages := pkgmanager.GetDistributionPackages(self.osInfo.Distribution, commonPackages)
 
-			// Common package names that we need
-			commonPackages := []string{
-				"curl",
-				"wget",
-				"ca-certificates",
-				"apt-transport-https",
-				"apache2-utils",
-			}
+		// Create a new package manager
+		installer, err := pkgmanager.NewPackageManager(self.osInfo.Distribution, self.logChan)
+		if err != nil {
+			return errMsg{err}
+		}
 
-			// Get distribution-specific package names
-			packages := pkgmanager.GetDistributionPackages(self.osInfo.Distribution, commonPackages)
-
-			// Create a new package manager
-			installer, err := pkgmanager.NewPackageManager(self.osInfo.Distribution, self.logChan)
-			if err != nil {
-				resultChan <- errMsg{err}
-				return
-			}
-
-			// Progress reporting function
-			progressFunc := func(packageName string, progress float64, step string, isComplete bool) {
-				// Send progress update to the UI
-				self.packageProgressChan <- packageInstallProgressMsg{
+		// Progress reporting function
+		progressFunc := func(packageName string, progress float64, step string, isComplete bool) {
+			// Only send if the channel is available and not full
+			if self.packageProgressChan != nil {
+				select {
+				case self.packageProgressChan <- packageInstallProgressMsg{
 					packageName: packageName,
 					progress:    progress,
 					step:        step,
 					isComplete:  isComplete,
+				}:
+					// Message sent successfully
+				default:
+					// Channel is full, log rather than block
+					if self.logChan != nil {
+						self.logChan <- fmt.Sprintf("Warning: Package progress channel is full (progress: %.1f%%)", progress*100)
+					}
 				}
 			}
-
-			// Install the packages with context
-			err = installer.InstallPackages(ctx, packages, progressFunc)
-			if err != nil {
-				resultChan <- errMsg{err}
-				return
-			}
-
-			resultChan <- installCompleteMsg{}
-		}()
-
-		// Return a command that will receive the result
-		return func() tea.Msg {
-			select {
-			case msg := <-resultChan:
-				return msg
-			case <-ctx.Done():
-				return errMsg{ctx.Err()}
-			}
 		}
+
+		// Install the packages with context
+		err = installer.InstallPackages(ctx, packages, progressFunc)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		return installCompleteMsg{}
 	}
 }
 
@@ -319,7 +296,7 @@ func (self Model) installK3S() tea.Cmd {
 
 		// Create a context with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
+		defer cancel() // Ensure resources are cleaned up
 
 		// Install K3S
 		kubeConfig, err := installer.Install(ctx)
@@ -328,24 +305,31 @@ func (self Model) installK3S() tea.Cmd {
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K3S installation failed: %s", err.Error()))}
 		}
 
-		// Create a new K8s client
-		client, err := k3s.NewK8sClient(kubeConfig)
+		// Create kubeClient
+		config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
 		if err != nil {
-			self.log(fmt.Sprintf("K8s client creation failed: %s", err.Error()))
-			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("K8s client creation failed: %s", err.Error()))}
+			self.log(fmt.Sprintf("Failed to create kubeconfig: %s", err.Error()))
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, "Failed to create kubeconfig")}
 		}
 
-		// create dependencies manager
-		dm, err := unbindInstaller.NewUnbindInstaller(kubeConfig, self.logChan, self.unbindProgressChan)
+		dynamicClient, err := dynamic.NewForConfig(config)
 		if err != nil {
-			self.log(fmt.Sprintf("Dependencies manager creation failed: %s", err.Error()))
-			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, fmt.Sprintf("Dependencies manager creation failed: %s", err.Error()))}
+			self.log(fmt.Sprintf("Failed to create dynamic client: %s", err.Error()))
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, "Failed to create Kubernetes client")}
 		}
 
+		// Create the unbind installer, using the channels we already have in the model
+		unbindInstaller, err := unbindInstaller.NewUnbindInstaller(kubeConfig, self.logChan, self.unbindProgressChan)
+		if err != nil {
+			self.log(fmt.Sprintf("Failed to create Unbind installer: %s", err.Error()))
+			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, "Failed to create Unbind installer")}
+		}
+
+		// Signal that installation is complete by returning a completion message
 		return k3sInstallCompleteMsg{
 			kubeConfig:      kubeConfig,
-			kubeClient:      client,
-			unbindInstaller: dm,
+			kubeClient:      dynamicClient,
+			unbindInstaller: unbindInstaller,
 		}
 	}
 }

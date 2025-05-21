@@ -144,7 +144,7 @@ type DependencyInstallCompleteMsg struct{}
 
 // Last time we sent a progress update for each dependency
 var lastProgressUpdateTimes = make(map[string]time.Time)
-var minProgressInterval = 500 * time.Millisecond
+var minProgressInterval = 100 * time.Millisecond // Reduced interval for smoother updates
 
 // logProgress unifies logging, state tracking, and progress updates
 func (self *UnbindInstaller) logProgress(name string, progress float64, description string, err error, status InstallerStatus) {
@@ -215,14 +215,24 @@ func (self *UnbindInstaller) sendUpdateMessage(name string) {
 	// 1. It's the first message for this dependency
 	// 2. Status has changed (especially to completed or failed)
 	// 3. There's an error
-	// 4. It's been at least minProgressInterval since the last update
-	if !exists ||
+	// 4. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
+	// 5. Progress has changed significantly (>= 5%)
+	// 6. It's been at least minProgressInterval since the last update
+	shouldSendUpdate := !exists ||
 		state.status != StatusInstalling ||
 		state.error != nil ||
-		now.Sub(lastUpdate) >= minProgressInterval {
+		state.progress == 0.0 || state.progress == 0.25 || state.progress == 0.5 || state.progress == 0.75 || state.progress == 1.0 ||
+		now.Sub(lastUpdate) >= minProgressInterval
 
+	if shouldSendUpdate {
 		lastProgressUpdateTimes[name] = now
-		self.progressChan <- msg
+		select {
+		case self.progressChan <- msg:
+			// Message sent successfully
+		default:
+			// Channel is full, log it but don't block
+			self.sendLog(fmt.Sprintf("Warning: Progress channel for %s is full", name))
+		}
 	}
 }
 

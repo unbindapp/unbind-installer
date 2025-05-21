@@ -77,10 +77,11 @@ func NewModel(version string) Model {
 
 	s.Style = styles.SpinnerStyle
 
+	// Create buffered channels to prevent blocking
 	logChan := make(chan string, 100) // Buffer for log messages
-
-	progressChan := make(chan installer.UnbindInstallUpdateMsg)
-	packageProgressChan := make(chan packageInstallProgressMsg, 10)
+	progressChan := make(chan installer.UnbindInstallUpdateMsg, 20)
+	packageProgressChan := make(chan packageInstallProgressMsg, 20)
+	k3sProgressChan := make(chan k3s.K3SUpdateMessage, 20)
 
 	// Initialize domain input
 	domainInput := initializeDomainInput()
@@ -124,7 +125,7 @@ func NewModel(version string) Model {
 		logMessages:        []string{},
 		logChan:            logChan,
 		unbindProgressChan: progressChan,
-		k3sProgressChan:    make(chan k3s.K3SUpdateMessage),
+		k3sProgressChan:    k3sProgressChan,
 		k3sProgress: k3s.K3SUpdateMessage{
 			Progress:    0.0,
 			Status:      "pending",
@@ -143,12 +144,26 @@ func NewModel(version string) Model {
 
 // Init is the Bubble Tea initialization function
 func (self Model) Init() tea.Cmd {
-	return tea.Batch(
+	// Create a batch of initial commands
+	cmds := []tea.Cmd{
+		self.spinner.Tick, // Start the spinner
 		self.listenForLogs(),
-		self.listenForUnbindProgress(),
-		self.listenForK3SProgress(),
-		self.listenForPackageProgress(),
-	)
+	}
+
+	// Only add progress listeners if we have their corresponding channels
+	if self.unbindProgressChan != nil {
+		cmds = append(cmds, self.listenForUnbindProgress())
+	}
+
+	if self.k3sProgressChan != nil {
+		cmds = append(cmds, self.listenForK3SProgress())
+	}
+
+	if self.packageProgressChan != nil {
+		cmds = append(cmds, self.listenForPackageProgress())
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // Update handles messages and user input
@@ -325,6 +340,24 @@ func (self Model) View() string {
 	}
 }
 
+// listenForLogs returns a command that listens for log messages
+func (self Model) listenForLogs() tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg, ok := <-self.logChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+			return logMsg{message: msg}
+		default:
+			// Don't block if no message is available
+			time.Sleep(10 * time.Millisecond)
+			return nil
+		}
+	}
+}
+
 // listenForK3SProgress returns a command that listens for K3S progress messages
 func (self Model) listenForK3SProgress() tea.Cmd {
 	return func() tea.Msg {
@@ -336,8 +369,8 @@ func (self Model) listenForK3SProgress() tea.Cmd {
 			}
 			return msg
 		default:
-			// Sleep a bit to reduce CPU usage when no messages are available
-			time.Sleep(50 * time.Millisecond)
+			// Sleep briefly to reduce CPU usage when no messages are available
+			time.Sleep(10 * time.Millisecond)
 			return nil
 		}
 	}
@@ -354,8 +387,8 @@ func (self Model) listenForPackageProgress() tea.Cmd {
 			}
 			return msg
 		default:
-			// Sleep a bit to reduce CPU usage when no messages are available
-			time.Sleep(50 * time.Millisecond)
+			// Sleep briefly to reduce CPU usage when no messages are available
+			time.Sleep(10 * time.Millisecond)
 			return nil
 		}
 	}
@@ -372,9 +405,32 @@ func (self Model) listenForUnbindProgress() tea.Cmd {
 			}
 			return msg
 		default:
-			// Sleep a bit to reduce CPU usage when no messages are available
-			time.Sleep(50 * time.Millisecond)
+			// Sleep briefly to reduce CPU usage when no messages are available
+			time.Sleep(10 * time.Millisecond)
 			return nil
 		}
 	}
+}
+
+// processStateUpdate is a helper function to batch common commands for state updates
+func (self Model) processStateUpdate(cmd tea.Cmd, additionalCmds ...tea.Cmd) (tea.Model, tea.Cmd) {
+	allCmds := []tea.Cmd{cmd, self.listenForLogs()}
+
+	// Only add active progress listeners
+	if self.state == StateInstallingPackages && self.packageProgressChan != nil {
+		allCmds = append(allCmds, self.listenForPackageProgress())
+	}
+
+	if self.state == StateInstallingK3S && self.k3sProgressChan != nil {
+		allCmds = append(allCmds, self.listenForK3SProgress())
+	}
+
+	if self.state == StateInstallingUnbind && self.unbindProgressChan != nil {
+		allCmds = append(allCmds, self.listenForUnbindProgress())
+	}
+
+	// Add any additional commands
+	allCmds = append(allCmds, additionalCmds...)
+
+	return self, tea.Batch(allCmds...)
 }

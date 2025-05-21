@@ -136,7 +136,7 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForUnbindProgress())
+		return m.processStateUpdate(cmd)
 
 	case installer.UnbindInstallUpdateMsg:
 		// Store the progress update in model
@@ -155,18 +155,18 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update the Unbind installation status
 		m.updateUnbindInstall(msg)
 
-		// If installation completed successfully, send the completion message
+		// If installation completed successfully or failed, send the appropriate message
 		if msg.Status == "completed" {
-			return m, func() tea.Msg {
+			return m.processStateUpdate(func() tea.Msg {
 				return unbindInstallCompleteMsg{}
-			}
+			})
 		} else if msg.Status == "failed" {
-			return m, func() tea.Msg {
+			return m.processStateUpdate(func() tea.Msg {
 				return errMsg{err: msg.Error}
-			}
+			})
 		}
 
-		return m, tea.Batch(m.listenForLogs(), m.listenForUnbindProgress())
+		return m.processStateUpdate(nil)
 
 	case unbindInstallCompleteMsg:
 		// Install management script with cluster IP
@@ -177,6 +177,10 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Move to installation complete state
 		m.state = StateInstallationComplete
 		m.isLoading = false
+
+		// Clear progress channel reference to prevent memory leaks
+		m.unbindProgressChan = nil
+
 		return m, m.listenForLogs()
 
 	case errMsg:
@@ -188,12 +192,12 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m, tea.Batch(m.listenForLogs(), m.listenForUnbindProgress())
+		return m.processStateUpdate(nil)
 
 	case nil:
 		// Handle nil messages from optimized progress listener
-		return m, tea.Batch(m.listenForLogs(), m.listenForUnbindProgress())
+		return m.processStateUpdate(nil)
 	}
 
-	return m, tea.Batch(m.listenForLogs(), m.listenForUnbindProgress())
+	return m.processStateUpdate(nil)
 }

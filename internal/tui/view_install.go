@@ -105,7 +105,7 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForPackageProgress())
+		return m.processStateUpdate(cmd)
 
 	case packageInstallProgressMsg:
 		// Update package progress in the model
@@ -113,28 +113,22 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// If installation is complete, let the process continue
 		if msg.isComplete {
-			// Add a small delay to show the completed state first
-			return m, tea.Batch(
-				m.listenForLogs(),
-				tea.Tick(800*time.Millisecond, func(time.Time) tea.Msg {
-					return installCompleteMsg{}
-				}),
-			)
+			// Add a small delay to show the completed state before advancing
+			return m.processStateUpdate(tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+				return installCompleteMsg{}
+			}))
 		}
 
-		return m, tea.Batch(m.listenForLogs(), m.listenForPackageProgress())
+		return m.processStateUpdate(nil)
 
 	case installCompleteMsg:
 		m.state = StateInstallComplete
 		m.isLoading = false
 
-		// Schedule automatic advancement after 1.5 seconds to ensure UI has time to settle
-		return m, tea.Batch(
-			m.listenForLogs(),
-			tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
-				return autoAdvanceMsg{}
-			}),
-		)
+		// Schedule automatic advancement after waiting to ensure UI has time to settle
+		return m.processStateUpdate(tea.Tick(1*time.Second, func(time.Time) tea.Msg {
+			return autoAdvanceMsg{}
+		}))
 
 	case errMsg:
 		m.err = msg.err
@@ -145,14 +139,14 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m, m.listenForLogs()
+		return m.processStateUpdate(nil)
 
 	case nil:
 		// Handle nil messages (from the optimized progress listener)
-		return m, tea.Batch(m.listenForLogs(), m.listenForPackageProgress())
+		return m.processStateUpdate(nil)
 	}
 
-	return m, tea.Batch(m.listenForLogs(), m.listenForPackageProgress())
+	return m.processStateUpdate(nil)
 }
 
 // viewInstallComplete shows the installation complete screen
@@ -192,10 +186,9 @@ func (m Model) updateInstallCompleteState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Start IP detection for DNS configuration
 		m.state = StateDetectingIPs
 		m.isLoading = true
-		return m, tea.Batch(
+		return m.processStateUpdate(
 			m.spinner.Tick,
 			m.startDetectingIPs(),
-			m.listenForLogs(),
 		)
 
 	case errMsg:

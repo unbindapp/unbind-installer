@@ -61,7 +61,7 @@ func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage) *In
 
 // Last time we sent a progress update
 var lastProgressUpdateTime time.Time
-var minProgressInterval = 500 * time.Millisecond
+var minProgressInterval = 100 * time.Millisecond // Reduced interval for smoother updates
 
 // logProgress sends a log message, progress update, and update message
 func (self *Installer) logProgress(progress float64, status string, description string, err error) {
@@ -80,17 +80,9 @@ func (self *Installer) logProgress(progress float64, status string, description 
 		self.state.status = status
 	}
 
-	// Only send updates when they're significant to prevent overwhelming the UI
-	shouldSendUpdate := (err != nil) || // Always send errors
-		(status != self.state.lastMsg.Status) || // Status changed
-		(description != "" && description != self.state.lastMsg.Description) || // New step description
-		(progress-self.state.lastMsg.Progress >= 0.05) || // Progress increased by at least 5%
-		(progress == 1.0 && self.state.lastMsg.Progress != 1.0) // Final completion
-
-	if shouldSendUpdate {
-		// Send detailed update message
-		self.sendUpdateMessage(progress, status, description, err)
-	}
+	// We'll continue to track all updates in the local state
+	// but only send significant ones to the UI
+	self.sendUpdateMessage(progress, status, description, err)
 }
 
 // log sends a message to the log channel if available
@@ -117,15 +109,27 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 		msg.StepHistory = append(msg.StepHistory, description)
 	}
 
-	// Throttle update sending
-	now := time.Now()
-	if now.Sub(lastProgressUpdateTime) >= minProgressInterval ||
-		status == "completed" || status == "failed" || status != self.state.lastMsg.Status {
+	// Always update local state
+	self.state.lastMsg = msg
 
-		self.state.lastMsg = msg
-		lastProgressUpdateTime = now
+	// Only send to update channel based on criteria
+	if self.UpdateChan != nil {
+		// Throttle update sending for efficiency
+		now := time.Now()
 
-		if self.UpdateChan != nil {
+		// Always send messages when:
+		// 1. There's an error
+		// 2. Status has changed (especially to completed or failed)
+		// 3. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
+		// 4. It's been at least minimum interval since last update
+		shouldSendUpdate := (err != nil) ||
+			(status != self.state.lastMsg.Status) ||
+			(progress-self.state.lastMsg.Progress >= 0.05) ||
+			(progress == 0.0 || progress == 0.25 || progress == 0.5 || progress == 0.75 || progress == 1.0) ||
+			now.Sub(lastProgressUpdateTime) >= minProgressInterval
+
+		if shouldSendUpdate {
+			lastProgressUpdateTime = now
 			self.UpdateChan <- msg
 		}
 	}

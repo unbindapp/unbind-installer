@@ -136,7 +136,7 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, tea.Batch(cmd, m.listenForLogs(), m.listenForK3SProgress())
+		return m.processStateUpdate(cmd)
 
 	case k3s.K3SUpdateMessage:
 		// Store the progress update in model
@@ -155,23 +155,22 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update the K3S installation status
 		m.updateK3SInstall(msg)
 
-		// If installation completed successfully, send the completion message
+		// If installation completed successfully or failed, send the appropriate message
 		if msg.Status == "completed" {
-			return m, func() tea.Msg {
-				// Replace these with your actual values
+			return m.processStateUpdate(func() tea.Msg {
 				return k3sInstallCompleteMsg{
 					kubeClient:      nil,                         // Your actual kubeClient
 					kubeConfig:      "/etc/rancher/k3s/k3s.yaml", // Your actual kubeConfig
 					unbindInstaller: nil,                         // Your actual unbindInstaller
 				}
-			}
+			})
 		} else if msg.Status == "failed" {
-			return m, func() tea.Msg {
+			return m.processStateUpdate(func() tea.Msg {
 				return errMsg{err: msg.Error}
-			}
+			})
 		}
 
-		return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
+		return m.processStateUpdate(nil)
 
 	case k3sInstallCompleteMsg:
 		// Install Unbind after K3S
@@ -180,10 +179,13 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.kubeClient = msg.kubeClient
 		m.kubeConfig = msg.kubeConfig
 		m.unbindInstaller = msg.unbindInstaller
-		return m, tea.Batch(
+
+		// Clear progress channel reference to prevent memory leaks
+		m.k3sProgressChan = nil
+
+		return m.processStateUpdate(
 			m.spinner.Tick,
 			m.installUnbind(),
-			m.listenForLogs(),
 		)
 
 	case errMsg:
@@ -195,12 +197,12 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
+		return m.processStateUpdate(nil)
 
 	case nil:
 		// Handle nil messages from optimized progress listener
-		return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
+		return m.processStateUpdate(nil)
 	}
 
-	return m, tea.Batch(m.listenForLogs(), m.listenForK3SProgress())
+	return m.processStateUpdate(nil)
 }
