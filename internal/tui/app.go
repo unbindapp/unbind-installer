@@ -155,7 +155,7 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle global key events first
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
-		case "ctrl+c", "q", "esc":
+		case "ctrl+c", "ctrl+q", "esc":
 			return self, tea.Quit
 		case "d":
 			if self.state != StateDNSConfig {

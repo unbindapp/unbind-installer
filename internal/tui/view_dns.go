@@ -160,7 +160,7 @@ func viewDNSConfig(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
 
 	return s.String()
 }
@@ -267,7 +267,7 @@ func viewDNSValidation(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
 
 	return s.String()
 }
@@ -476,9 +476,9 @@ func viewDNSFailed(m Model) string {
 	// Options
 	s.WriteString(m.styles.Bold.Render("Options:"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("1. Press 'r' to retry the validation"))
+	s.WriteString(m.styles.Normal.Render("1. Press Ctrl+r to retry the validation"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("2. Press 'c' to change the domain"))
+	s.WriteString(m.styles.Normal.Render("2. Press Ctrl+e to change the domain"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("3. Press Enter to continue anyway (not recommended)"))
 	s.WriteString("\n\n")
@@ -489,7 +489,7 @@ func viewDNSFailed(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
 
 	return s.String()
 }
@@ -503,7 +503,7 @@ func (m Model) updateDNSFailedState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logChan <- "Continuing without validated DNS configuration..."
 			return m, tea.Quit
 
-		case "r":
+		case "ctrl+r":
 			// Add feedback message
 			m.logChan <- "Retrying DNS validation..."
 
@@ -520,7 +520,7 @@ func (m Model) updateDNSFailedState(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.listenForLogs(),
 			)
 
-		case "c":
+		case "ctrl+e":
 			// Go back to DNS configuration
 			m.state = StateDNSConfig
 			m.isLoading = false
@@ -637,12 +637,12 @@ func viewRegistryDomainInput(m Model) string {
 	s.WriteString(m.styles.Normal.Render(" to validate domain"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("b"))
+	s.WriteString(m.styles.Key.Render("Ctrl+b"))
 	s.WriteString(m.styles.Normal.Render(" to go back to registry type selection"))
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
 
 	return s.String()
 }
@@ -652,7 +652,7 @@ func (m Model) updateRegistryDomainInputState(msg tea.Msg) (tea.Model, tea.Cmd) 
 	var cmd tea.Cmd
 
 	// Check if back button was pressed
-	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "ctrl+b" {
 		// Go back to registry type selection
 		m.state = StateRegistryTypeSelection
 		return m, m.listenForLogs()
@@ -761,7 +761,7 @@ func viewRegistryDNSValidation(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
 
 	return s.String()
 }
@@ -889,12 +889,12 @@ func viewRegistryTypeSelection(m Model) string {
 	s.WriteString(m.styles.Normal.Render(" for External Registry"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("b"))
+	s.WriteString(m.styles.Key.Render("Ctrl+b"))
 	s.WriteString(m.styles.Normal.Render(" to go back to DNS configuration"))
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
 
 	return s.String()
 }
@@ -925,7 +925,7 @@ func (m Model) updateRegistryTypeSelectionState(msg tea.Msg) (tea.Model, tea.Cmd
 			m.usernameInput.Focus()
 			return m, m.listenForLogs()
 
-		case "b":
+		case "ctrl+b":
 			// Go back to DNS configuration
 			m.state = StateDNSConfig
 			m.domainInput.Focus()
@@ -1050,24 +1050,26 @@ func viewExternalRegistryInput(m Model) string {
 	s.WriteString(m.styles.Bold.Render("Navigation:"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("1-4"))
-	s.WriteString(m.styles.Normal.Render(" to select registry type"))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("• Press "))
 	s.WriteString(m.styles.Key.Render("Tab"))
 	s.WriteString(m.styles.Normal.Render(" to switch between fields"))
+	s.WriteString("\n")
+	s.WriteString(m.styles.Normal.Render("• Press "))
+	s.WriteString(m.styles.Key.Render("Ctrl+1"))
+	s.WriteString(m.styles.Normal.Render(" through "))
+	s.WriteString(m.styles.Key.Render("Ctrl+4"))
+	s.WriteString(m.styles.Normal.Render(" to select registry type"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("• Press "))
 	s.WriteString(m.styles.Key.Render("Enter"))
 	s.WriteString(m.styles.Normal.Render(" to validate credentials"))
 	s.WriteString("\n")
 	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("b"))
+	s.WriteString(m.styles.Key.Render("Ctrl+b"))
 	s.WriteString(m.styles.Normal.Render(" to go back to registry type selection"))
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
 
 	return s.String()
 }
@@ -1077,7 +1079,7 @@ func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd
 	var cmd tea.Cmd
 
 	// Check if back button was pressed
-	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "ctrl+b" {
 		// Go back to registry type selection
 		m.state = StateRegistryTypeSelection
 		return m, m.listenForLogs()
@@ -1086,39 +1088,21 @@ func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd
 	// Check for registry selection keys
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
-		case "1":
+		case "ctrl+1":
 			// Docker Hub
 			m.selectedRegistry = 0
-			if m.usernameInput.Focused() || m.passwordInput.Focused() || m.registryHostInput.Focused() {
-				// Keep current focus
-			} else {
-				m.usernameInput.Focus()
-			}
 			return m, m.listenForLogs()
-		case "2":
+		case "ctrl+2":
 			// GitHub Container Registry
 			m.selectedRegistry = 1
-			if m.usernameInput.Focused() || m.passwordInput.Focused() || m.registryHostInput.Focused() {
-				// Keep current focus
-			} else {
-				m.usernameInput.Focus()
-			}
 			return m, m.listenForLogs()
-		case "3":
+		case "ctrl+3":
 			// Red Hat Quay
 			m.selectedRegistry = 2
-			if m.usernameInput.Focused() || m.passwordInput.Focused() || m.registryHostInput.Focused() {
-				// Keep current focus
-			} else {
-				m.usernameInput.Focus()
-			}
 			return m, m.listenForLogs()
-		case "4":
+		case "ctrl+4":
 			// Custom Registry
 			m.selectedRegistry = 3
-			if !m.registryHostInput.Focused() && !m.usernameInput.Focused() && !m.passwordInput.Focused() {
-				m.registryHostInput.Focus()
-			}
 			return m, m.listenForLogs()
 		}
 	}
@@ -1255,7 +1239,7 @@ func viewExternalRegistryValidation(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
 
 	return s.String()
 }
