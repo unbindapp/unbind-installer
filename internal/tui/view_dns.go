@@ -1091,19 +1091,39 @@ func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd
 		case "ctrl+1":
 			// Docker Hub
 			m.selectedRegistry = 0
-			return m, m.listenForLogs()
+			m.usernameInput.SetValue("")
+			m.passwordInput.SetValue("")
+			m.registryHostInput.SetValue("")
+			m.registryHostInput.Blur()
+			m.usernameInput.Focus()
+			m.passwordInput.Blur()
 		case "ctrl+2":
 			// GitHub Container Registry
 			m.selectedRegistry = 1
-			return m, m.listenForLogs()
+			m.usernameInput.SetValue("")
+			m.passwordInput.SetValue("")
+			m.registryHostInput.SetValue("")
+			m.registryHostInput.Blur()
+			m.usernameInput.Focus()
+			m.passwordInput.Blur()
 		case "ctrl+3":
 			// Red Hat Quay
 			m.selectedRegistry = 2
-			return m, m.listenForLogs()
+			m.usernameInput.SetValue("")
+			m.passwordInput.SetValue("")
+			m.registryHostInput.SetValue("")
+			m.registryHostInput.Blur()
+			m.usernameInput.Focus()
+			m.passwordInput.Blur()
 		case "ctrl+4":
 			// Custom Registry
 			m.selectedRegistry = 3
-			return m, m.listenForLogs()
+			m.registryHostInput.SetValue("")
+			m.usernameInput.SetValue("")
+			m.passwordInput.SetValue("")
+			m.registryHostInput.Focus()
+			m.usernameInput.Blur()
+			m.passwordInput.Blur()
 		}
 	}
 
@@ -1163,23 +1183,54 @@ func (m Model) updateExternalRegistryInputState(msg tea.Msg) (tea.Model, tea.Cmd
 		m.dnsInfo.RegistryHost = m.registryHostInput.Value()
 	}
 
-	// If Enter was pressed with valid credentials, start validation
+	// If Enter was pressed, handle tabbing or submission
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
-		if m.dnsInfo.RegistryUsername != "" && m.dnsInfo.RegistryPassword != "" {
-			// For custom registry, also require host
-			if m.selectedRegistry == 3 && m.dnsInfo.RegistryHost == "" {
+		if m.selectedRegistry == 3 {
+			// Custom registry: 3 fields
+			if m.registryHostInput.Focused() {
+				// Move to username
+				m.registryHostInput.Blur()
+				m.usernameInput.Focus()
+				return m, nil
+			} else if m.usernameInput.Focused() {
+				// Move to password
+				m.usernameInput.Blur()
+				m.passwordInput.Focus()
+				return m, nil
+			} else if m.passwordInput.Focused() {
+				// Only submit if all fields are filled
+				if m.dnsInfo.RegistryUsername != "" && m.dnsInfo.RegistryPassword != "" && m.dnsInfo.RegistryHost != "" {
+					m.state = StateExternalRegistryValidation
+					m.isLoading = true
+					m.dnsInfo.TestingStartTime = time.Now()
+					return m, tea.Batch(
+						m.spinner.Tick,
+						m.validateRegistryCredentials(),
+						m.listenForLogs(),
+					)
+				}
 				return m, m.listenForLogs()
 			}
-
-			m.state = StateExternalRegistryValidation
-			m.isLoading = true
-			m.dnsInfo.TestingStartTime = time.Now()
-
-			return m, tea.Batch(
-				m.spinner.Tick,
-				m.validateRegistryCredentials(),
-				m.listenForLogs(),
-			)
+		} else {
+			// Other registries: 2 fields
+			if m.usernameInput.Focused() {
+				// Move to password
+				m.usernameInput.Blur()
+				m.passwordInput.Focus()
+				return m, nil
+			} else if m.passwordInput.Focused() {
+				if m.dnsInfo.RegistryUsername != "" && m.dnsInfo.RegistryPassword != "" {
+					m.state = StateExternalRegistryValidation
+					m.isLoading = true
+					m.dnsInfo.TestingStartTime = time.Now()
+					return m, tea.Batch(
+						m.spinner.Tick,
+						m.validateRegistryCredentials(),
+						m.listenForLogs(),
+					)
+				}
+				return m, m.listenForLogs()
+			}
 		}
 	}
 
