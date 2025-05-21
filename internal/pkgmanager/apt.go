@@ -1,9 +1,9 @@
 package pkgmanager
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
-	"strings"
 )
 
 // AptInstaller handles installation of apt packages
@@ -20,72 +20,59 @@ func NewAptInstaller(logChan chan<- string) *AptInstaller {
 }
 
 // InstallPackages installs the specified packages using apt-get
-func (self *AptInstaller) InstallPackages(packages []string, progressFunc ProgressFunc) error {
+func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string, progressFunc ProgressFunc) error {
 	if len(packages) == 0 {
 		return nil
 	}
 
-	// Total number of phases to report progress
-	totalSteps := float64(4) // Update, Download, Install, Verify
-	currentStep := float64(0)
-
-	// Log what we're doing
-	self.log("Updating apt package lists...")
-	if progressFunc != nil {
-		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Updating package lists", false)
+	sendProgress := func(progress float64, step string) {
+		if progressFunc != nil {
+			progressFunc("", progress, step, false)
+		}
 	}
 
-	// Update package lists
-	updateCmd := exec.Command("apt-get", "update", "-y")
-	updateOutput, err := updateCmd.CombinedOutput()
-	if err != nil {
-		self.log(fmt.Sprintf("Error updating apt: %s", string(updateOutput)))
-		return fmt.Errorf("failed to update apt: %w", err)
+	// Create a channel to signal completion
+	done := make(chan error, 1)
+
+	// Start the installation in a goroutine
+	go func() {
+		// Update package lists
+		sendProgress(0.1, "Updating package lists...")
+		updateCmd := exec.CommandContext(ctx, "apt-get", "update", "-y")
+		if output, err := updateCmd.CombinedOutput(); err != nil {
+			self.log(fmt.Sprintf("Error updating apt: %s", string(output)))
+			done <- fmt.Errorf("failed to update apt: %w", err)
+			return
+		}
+
+		// Install packages
+		sendProgress(0.3, "Starting package installation...")
+		args := append([]string{"install", "-y"}, packages...)
+		installCmd := exec.CommandContext(ctx, "apt-get", args...)
+		if output, err := installCmd.CombinedOutput(); err != nil {
+			self.log(fmt.Sprintf("Error installing packages: %s", string(output)))
+			done <- fmt.Errorf("failed to install packages: %w", err)
+			return
+		}
+
+		sendProgress(0.9, "Verifying installation...")
+		done <- nil
+	}()
+
+	// Wait for completion or cancellation
+	select {
+	case <-ctx.Done():
+		self.log("Installation cancelled by user")
+		return ctx.Err()
+	case err := <-done:
+		if err == nil {
+			if progressFunc != nil {
+				progressFunc("", 1.0, "Installation complete", true)
+			}
+			self.log("Packages installed successfully")
+		}
+		return err
 	}
-	self.log("Package lists updated successfully")
-
-	// Update progress
-	currentStep++
-	if progressFunc != nil {
-		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Package lists updated", false)
-	}
-
-	// Install packages
-	self.log(fmt.Sprintf("Installing packages: %s", strings.Join(packages, ", ")))
-
-	// Update progress for starting installation
-	if progressFunc != nil {
-		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Starting installation", false)
-	}
-
-	args := append([]string{"install", "-y"}, packages...)
-	installCmd := exec.Command("apt-get", args...)
-	installOutput, err := installCmd.CombinedOutput()
-	if err != nil {
-		self.log(fmt.Sprintf("Error installing packages: %s", string(installOutput)))
-		return fmt.Errorf("failed to install packages: %w", err)
-	}
-
-	// Update progress for installation completion
-	currentStep++
-	if progressFunc != nil {
-		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Packages installed", false)
-	}
-
-	// Final verification step
-	currentStep++
-	if progressFunc != nil {
-		progressFunc("", 0.1+(currentStep/totalSteps)*0.9, "Verifying installation", false)
-	}
-
-	self.log("Packages installed successfully")
-
-	// Complete
-	if progressFunc != nil {
-		progressFunc("", 1.0, "Installation complete", true)
-	}
-
-	return nil
 }
 
 // log sends a message to the log channel if available

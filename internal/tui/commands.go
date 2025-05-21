@@ -93,42 +93,65 @@ func (self Model) createSwapCommand(sizeGB int) tea.Cmd {
 // installRequiredPackages is a command that installs the required packages
 func (self Model) installRequiredPackages() tea.Cmd {
 	return func() tea.Msg {
-		// Common package names that we need
-		commonPackages := []string{
-			"curl",
-			"wget",
-			"ca-certificates",
-			"apt-transport-https",
-			"apache2-utils",
-		}
+		// Create a context that we can cancel
+		ctx, cancel := context.WithCancel(context.Background())
+		
+		// Create a channel to receive the result
+		resultChan := make(chan tea.Msg, 1)
 
-		// Get distribution-specific package names
-		packages := pkgmanager.GetDistributionPackages(self.osInfo.Distribution, commonPackages)
+		// Start the installation in a goroutine
+		go func() {
+			defer cancel()
 
-		// Create a new package manager
-		installer, err := pkgmanager.NewPackageManager(self.osInfo.Distribution, self.logChan)
-		if err != nil {
-			return errMsg{err}
-		}
+			// Common package names that we need
+			commonPackages := []string{
+				"curl",
+				"wget",
+				"ca-certificates",
+				"apt-transport-https",
+				"apache2-utils",
+			}
 
-		// Progress reporting function
-		progressFunc := func(packageName string, progress float64, step string, isComplete bool) {
-			// Send progress update to the UI
-			self.packageProgressChan <- packageInstallProgressMsg{
-				packageName: packageName,
-				progress:    progress,
-				step:        step,
-				isComplete:  isComplete,
+			// Get distribution-specific package names
+			packages := pkgmanager.GetDistributionPackages(self.osInfo.Distribution, commonPackages)
+
+			// Create a new package manager
+			installer, err := pkgmanager.NewPackageManager(self.osInfo.Distribution, self.logChan)
+			if err != nil {
+				resultChan <- errMsg{err}
+				return
+			}
+
+			// Progress reporting function
+			progressFunc := func(packageName string, progress float64, step string, isComplete bool) {
+				// Send progress update to the UI
+				self.packageProgressChan <- packageInstallProgressMsg{
+					packageName: packageName,
+					progress:    progress,
+					step:        step,
+					isComplete:  isComplete,
+				}
+			}
+
+			// Install the packages with context
+			err = installer.InstallPackages(ctx, packages, progressFunc)
+			if err != nil {
+				resultChan <- errMsg{err}
+				return
+			}
+
+			resultChan <- installCompleteMsg{}
+		}()
+
+		// Return a command that will receive the result
+		return func() tea.Msg {
+			select {
+			case msg := <-resultChan:
+				return msg
+			case <-ctx.Done():
+				return errMsg{ctx.Err()}
 			}
 		}
-
-		// Install the packages
-		err = installer.InstallPackages(packages, progressFunc)
-		if err != nil {
-			return errMsg{err}
-		}
-
-		return installCompleteMsg{}
 	}
 }
 
