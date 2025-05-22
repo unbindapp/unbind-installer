@@ -25,7 +25,7 @@ func viewCheckK3s(m Model) string {
 	s.WriteString("\n\n")
 
 	// Footer / Quit message
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -62,7 +62,7 @@ func viewConfirmUninstallK3s(m Model) string {
 	s.WriteString("\n\n")
 
 	// Instructions / Footer
-	s.WriteString(m.styles.Subtle.Render("Press 'y' to uninstall and continue, or 'n'/'q' to quit."))
+	s.WriteString(m.styles.Subtle.Render("Press 'y' to uninstall and continue, or 'n'/'Ctrl+c' to quit."))
 
 	return s.String()
 }
@@ -83,7 +83,7 @@ func viewUninstallingK3s(m Model) string {
 	s.WriteString("\n\n")
 
 	// Footer / Quit message
-	s.WriteString(m.styles.Subtle.Render("Uninstall process started. Pressing 'ctrl+c' will attempt to quit, but the uninstall may continue in the background."))
+	s.WriteString(m.styles.Subtle.Render("Uninstall process started. Pressing 'Ctrl+c' will attempt to quit, but the uninstall may continue in the background."))
 
 	return s.String()
 }

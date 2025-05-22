@@ -22,7 +22,7 @@ func viewLoading(m Model) string {
 	s.WriteString(" ")
 	s.WriteString(m.styles.Normal.Render("Detecting OS information..."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to quit"))
 
 	return s.String()
 }
@@ -96,15 +96,15 @@ func viewError(m Model) string {
 	} else if errors.Is(m.err, errdefs.ErrK3sInstallFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, the K3s installation failed!"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'd'."))
+		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'Ctrl+D'."))
 	} else if errors.Is(m.err, errdefs.ErrNetworkDetectionFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, I couldn't detect your network interfaces!"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'd'."))
+		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'Ctrl+D'."))
 	} else if errors.Is(m.err, errdefs.ErrUnbindInstallFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, the installation of unbind failed!"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'd'."))
+		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'Ctrl+D'."))
 	} else if m.err != nil {
 		s.WriteString(m.styles.Error.Render(fmt.Sprintf("An error occurred: %v", m.err)))
 	} else {
@@ -112,7 +112,7 @@ func viewError(m Model) string {
 	}
 
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to quit"))
 
 	return s.String()
 }

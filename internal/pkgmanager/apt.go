@@ -26,76 +26,99 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 		return nil
 	}
 
-	// Last time we sent a progress update
-	lastProgressUpdate := time.Now()
-	minProgressInterval := 100 * time.Millisecond // Reduced interval for smoother updates
+	// Start with proper progress reporting
+	if progressFunc != nil {
+		progressFunc("", 0.01, "Initializing package installation...", false)
+	}
 
-	sendProgress := func(progress float64, step string) {
+	// Update package lists and install packages
+	steps := []struct {
+		progress float64
+		step     string
+		cmd      *exec.Cmd
+	}{
+		{
+			progress: 0.1,
+			step:     "Updating package lists...",
+			cmd:      exec.CommandContext(ctx, "apt-get", "update", "-y"),
+		},
+		{
+			progress: 0.3,
+			step:     fmt.Sprintf("Installing %d packages...", len(packages)),
+			cmd:      exec.CommandContext(ctx, "apt-get", append([]string{"install", "-y"}, packages...)...),
+		},
+	}
+
+	// Execute each step with progress updates
+	for i, step := range steps {
+		// Report starting this step
 		if progressFunc != nil {
-			// Throttle progress updates to reduce UI thrashing
-			now := time.Now()
-			if now.Sub(lastProgressUpdate) >= minProgressInterval {
-				progressFunc("", progress, step, false)
-				lastProgressUpdate = now
-			}
+			progressFunc("", step.progress, step.step, false)
 		}
+		self.log(step.step)
+
+		// Start a goroutine to update progress during long-running steps
+		progressDone := make(chan struct{})
+		go func(startProgress, endProgress float64, stepDesc string) {
+			ticker := time.NewTicker(250 * time.Millisecond)
+			defer ticker.Stop()
+
+			currentProgress := startProgress
+			endPoint := endProgress - 0.05 // Leave room for completion
+
+			for {
+				select {
+				case <-ticker.C:
+					// Gradually increment progress
+					if currentProgress < endPoint {
+						currentProgress += 0.02
+						if progressFunc != nil {
+							progressFunc("", currentProgress, stepDesc, false)
+						}
+					}
+				case <-progressDone:
+					return
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(step.progress, func() float64 {
+			if i < len(steps)-1 {
+				return steps[i+1].progress
+			}
+			return 0.9
+		}(), step.step)
+
+		// Execute the command
+		output, err := step.cmd.CombinedOutput()
+		close(progressDone) // Stop progress updates
+
+		// Handle errors
+		if err != nil {
+			self.log(fmt.Sprintf("Error: %s\nOutput: %s", err, string(output)))
+			return fmt.Errorf("failed during %s: %w", step.step, err)
+		}
+
+		// Log successful completion
+		self.log(fmt.Sprintf("Completed: %s", step.step))
 	}
 
-	// Create a channel to signal completion
-	done := make(chan error, 1)
-
-	// Start the installation in a goroutine
-	go func() {
-		defer close(done) // Ensure channel is closed when goroutine exits
-
-		// Update package lists
-		sendProgress(0.1, "Updating package lists...")
-		updateCmd := exec.CommandContext(ctx, "apt-get", "update", "-y")
-		if output, err := updateCmd.CombinedOutput(); err != nil {
-			self.log(fmt.Sprintf("Error updating apt: %s", string(output)))
-			done <- fmt.Errorf("failed to update apt: %w", err)
-			return
-		}
-
-		// Install packages
-		sendProgress(0.3, "Starting package installation...")
-		args := append([]string{"install", "-y"}, packages...)
-		installCmd := exec.CommandContext(ctx, "apt-get", args...)
-		if output, err := installCmd.CombinedOutput(); err != nil {
-			self.log(fmt.Sprintf("Error installing packages: %s", string(output)))
-			done <- fmt.Errorf("failed to install packages: %w", err)
-			return
-		}
-
-		sendProgress(0.9, "Verifying installation...")
-
-		// Add a small delay to prevent UI thrashing during transition
-		select {
-		case <-ctx.Done():
-			// Context cancelled, don't wait
-			return
-		case <-time.After(200 * time.Millisecond):
-			// Delay completed
-		}
-
-		done <- nil
-	}()
-
-	// Wait for completion or cancellation
-	select {
-	case <-ctx.Done():
-		self.log("Installation cancelled by user")
-		return ctx.Err()
-	case err := <-done:
-		if err == nil {
-			if progressFunc != nil {
-				// Ensure we send the final completion status
-				progressFunc("", 1.0, "Installation complete", true)
-			}
-			self.log("Packages installed successfully")
-		}
-		return err
+	// Final verification step
+	if progressFunc != nil {
+		progressFunc("", 0.9, "Verifying installation...", false)
 	}
+	self.log("Verifying installation...")
+
+	// Wait a moment to show completion progress
+	time.Sleep(500 * time.Millisecond)
+
+	// Report completion
+	if progressFunc != nil {
+		progressFunc("", 1.0, "Installation complete", true)
+	}
+	self.log("Packages installed successfully")
+
+	return nil
 }
 
 // log writes to log channel

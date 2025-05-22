@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	
+
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -60,7 +60,7 @@ func viewRegistryTypeSelection(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
 	return s.String()
 }
@@ -235,7 +235,7 @@ func viewExternalRegistryInput(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
 	return s.String()
 }
@@ -432,7 +432,7 @@ func viewExternalRegistryValidation(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
 	return s.String()
 }

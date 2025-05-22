@@ -207,6 +207,15 @@ fs.inotify.max_user_instances = 2099999999`
 
 				go func() {
 					currentProgress := 0.20
+					phase := 0
+					phases := []string{
+						"Installing K3S server components...",
+						"Configuring K3S server...",
+						"Setting up K3S service...",
+						"Configuring K3S networking...",
+						"Starting K3S service...",
+						"Applying initial configuration...",
+					}
 
 					ticker := time.NewTicker(500 * time.Millisecond)
 					defer ticker.Stop()
@@ -216,7 +225,13 @@ fs.inotify.max_user_instances = 2099999999`
 						case <-ticker.C:
 							if currentProgress < 0.80 {
 								currentProgress += 0.01
-								self.logProgress(currentProgress, "installing", "Installing K3S server components...", nil)
+
+								// Update phase description periodically
+								if currentProgress > 0.20+float64(phase+1)*0.10 && phase < len(phases)-1 {
+									phase++
+								}
+
+								self.logProgress(currentProgress, "installing", phases[phase], nil)
 							}
 						case <-installDone:
 							return

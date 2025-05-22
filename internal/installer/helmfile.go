@@ -63,20 +63,66 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 			Action: func(ctx context.Context) error {
 				self.logProgress(dependencyName, 0.21, fmt.Sprintf("Cloning from %s", opts.RepoURL), nil, StatusInstalling)
 
+				// First check if git is installed
+				checkCmd := exec.CommandContext(ctx, "git", "--version")
+				if err := checkCmd.Run(); err != nil {
+					return fmt.Errorf("git command not found, please install git: %w", err)
+				}
+
+				// Set up progress updates during clone
+				cloneDone := make(chan struct{})
+				go func() {
+					ticker := time.NewTicker(200 * time.Millisecond)
+					defer ticker.Stop()
+
+					currentProgress := 0.21
+					messages := []string{
+						"Initializing git clone...",
+						"Connecting to repository...",
+						"Receiving objects...",
+						"Resolving deltas...",
+						"Checking out files...",
+					}
+					msgIndex := 0
+
+					for {
+						select {
+						case <-ticker.C:
+							if currentProgress < 0.28 {
+								currentProgress += 0.01
+
+								// Rotate through different messages
+								if currentProgress > 0.21 && msgIndex < len(messages)-1 && currentProgress > 0.21+float64(msgIndex)*0.014 {
+									msgIndex++
+								}
+
+								self.logProgress(dependencyName, currentProgress, messages[msgIndex], nil, StatusInstalling)
+							}
+						case <-cloneDone:
+							return
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
+
 				cmd := exec.CommandContext(ctx, "git", "clone", opts.RepoURL, repoDir)
 
 				// Stream the output
 				stdoutPipe, err := cmd.StdoutPipe()
 				if err != nil {
+					close(cloneDone)
 					return fmt.Errorf("failed to create git stdout pipe: %w", err)
 				}
 
 				stderrPipe, err := cmd.StderrPipe()
 				if err != nil {
+					close(cloneDone)
 					return fmt.Errorf("failed to create git stderr pipe: %w", err)
 				}
 
 				if err := cmd.Start(); err != nil {
+					close(cloneDone)
 					return fmt.Errorf("failed to start git clone: %w", err)
 				}
 
@@ -96,7 +142,10 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					}
 				}()
 
-				if err := cmd.Wait(); err != nil {
+				err = cmd.Wait()
+				close(cloneDone) // Signal progress updates to stop
+
+				if err != nil {
 					return fmt.Errorf("failed to clone repository: %w", err)
 				}
 
@@ -149,7 +198,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Add final "sync" command
 				args = append(args, "sync")
 
-				self.logProgress(dependencyName, 0.31, fmt.Sprintf("Starting installation with %s", strings.Join(args, "|")), nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.31, fmt.Sprintf("Starting installation with helmfile sync"), nil, StatusInstalling)
 
 				// Set up the command to run helmfile sync
 				cmd := exec.CommandContext(ctx, "helmfile", args...)
@@ -158,29 +207,51 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Start progress updates during wait
 				waitDone := make(chan error, 1)
 
+				// Define progress stages with meaningful descriptions
+				type progressStage struct {
+					progress float64
+					message  string
+				}
+
+				stages := []progressStage{
+					{0.35, "Initializing Kubernetes cluster..."},
+					{0.40, "Verifying Kubernetes configuration..."},
+					{0.45, "Preparing Helm charts..."},
+					{0.50, "Installing Container Registry..."},
+					{0.55, "Installing PostgreSQL Operator..."},
+					{0.60, "Installing Valkey Cache..."},
+					{0.65, "Installing Ingress Controller..."},
+					{0.70, "Configuring Authentication Services..."},
+					{0.75, "Installing Core Unbind Services..."},
+					{0.80, "Configuring Network Policies..."},
+					{0.85, "Finalizing Installation..."},
+				}
+
 				// Update progress during long-running operations
 				go func() {
-					currentProgress := 0.35
+					stageIndex := 0
 
 					// Set up a ticker for progress updates
-					ticker := time.NewTicker(500 * time.Millisecond)
+					ticker := time.NewTicker(1 * time.Second)
 					defer ticker.Stop()
 
 					for {
 						select {
 						case <-ticker.C:
-							if currentProgress < 0.85 {
-								// Increment progress more quickly
-								currentProgress += 0.02
+							if stageIndex < len(stages) {
+								// Send current stage update
+								stage := stages[stageIndex]
+								self.logProgress(dependencyName, stage.progress, stage.message, nil, StatusInstalling)
 
-								// Use current description or a default
-								description := self.state[dependencyName].description
-								if description == "" || description == "Running helmfile sync" {
-									description = "Installing Unbind components..."
+								// Advance to next stage after a delay
+								stageIndex++
+
+								// Set a longer delay for later stages to space them out
+								if stageIndex > len(stages)/2 {
+									time.Sleep(5 * time.Second)
+								} else {
+									time.Sleep(3 * time.Second)
 								}
-
-								// Send progress update
-								self.logProgress(dependencyName, currentProgress, description, nil, StatusInstalling)
 							}
 						case <-waitDone:
 							return
@@ -196,16 +267,19 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Create pipes for stdout/stderr
 				stdoutPipe, err := cmd.StdoutPipe()
 				if err != nil {
+					close(waitDone)
 					return fmt.Errorf("failed to create stdout pipe: %w", err)
 				}
 
 				stderrPipe, err := cmd.StderrPipe()
 				if err != nil {
+					close(waitDone)
 					return fmt.Errorf("failed to create stderr pipe: %w", err)
 				}
 
 				// Start the command
 				if err := cmd.Start(); err != nil {
+					close(waitDone)
 					return fmt.Errorf("failed to start helmfile sync: %w", err)
 				}
 

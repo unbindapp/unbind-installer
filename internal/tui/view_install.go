@@ -270,7 +270,7 @@ func viewInstallationComplete(m Model) string {
 	// Additional information
 	s.WriteString(m.styles.Normal.Render("Your Unbind instance is now ready to use."))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to exit."))
+	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to exit."))
 
 	return s.String()
 }
@@ -280,7 +280,7 @@ func (m Model) updateInstallationCompleteState(msg tea.Msg) (tea.Model, tea.Cmd)
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "ctrl+c":
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:

@@ -24,7 +24,7 @@ func viewCheckingSwap(m Model) string {
 	}
 	s.WriteString(m.styles.Bold.Render("Checking swap configuration..."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
+	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to quit"))
 	return s.String()
 }
 
@@ -40,7 +40,7 @@ func viewConfirmCreateSwap(m Model) string {
 		s.WriteString(" ")
 		s.WriteString(m.styles.Bold.Render("Checking disk space..."))
 		s.WriteString("\n\n")
-		s.WriteString(m.styles.Subtle.Render("Press 'q' to quit"))
+		s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to quit"))
 		return s.String()
 	}
 
@@ -69,7 +69,7 @@ func viewConfirmCreateSwap(m Model) string {
 	s.WriteString(buttonRow)
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Subtle.Render("Press 'y' to configure swap, 'n' to skip, or 'q' to quit."))
+	s.WriteString(m.styles.Subtle.Render("Press 'y' to configure swap, 'n' to skip, or 'Ctrl+c' to quit."))
 
 	return s.String()
 }
@@ -101,7 +101,7 @@ func viewEnterSwapSize(m Model) string {
 		s.WriteString("\n\n")
 	}
 
-	s.WriteString(m.styles.Subtle.Render("Press Enter to confirm, or 'q' to quit."))
+	s.WriteString(m.styles.Subtle.Render("Press Enter to confirm, or 'Ctrl+c' to quit."))
 
 	return s.String()
 }
@@ -122,7 +122,7 @@ func viewCreatingSwap(m Model) string {
 	s.WriteString("\n")
 	s.WriteString(m.styles.Subtle.Render("Check console output for 'dd' progress if applicable."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'q' to attempt to quit (may leave partial files)."))
+	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to attempt to quit (may leave partial files)."))
 	return s.String()
 }
 
@@ -138,7 +138,7 @@ func viewSwapCreated(m Model) string {
 	s.WriteString("\n\n")
 	s.WriteString(m.styles.Subtle.Render("Continuing installation automatically in a few seconds..."))
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render("Press Enter to continue immediately, or 'q' to quit."))
+	s.WriteString(m.styles.Subtle.Render("Press Enter to continue immediately, or 'Ctrl+c' to quit."))
 
 	return s.String()
 }

@@ -172,9 +172,9 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle global key events first
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
-		case "ctrl+c", "ctrl+q", "esc":
+		case "ctrl+c":
 			return self, tea.Quit
-		case "d":
+		case "ctrl+d":
 			if self.state != StateDNSConfig && self.state != StateExternalRegistryInput && self.state != StateRegistryDomainInput {
 				// Toggle debug logs view
 				self.showDebugLogs = !self.showDebugLogs
@@ -479,7 +479,6 @@ func (self Model) listenForPackageProgress() tea.Cmd {
 		}
 	}
 }
-
 
 // sendCompletionMessage safely sends a completion message to a channel
 func (self Model) sendCompletionMessage(channel interface{}, msg interface{}) {

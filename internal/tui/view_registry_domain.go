@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -85,7 +85,7 @@ func viewRegistryDomainInput(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
 	return s.String()
 }
@@ -188,7 +188,7 @@ func viewRegistryDNSValidation(m Model) string {
 
 	// Status bar at the bottom
 	s.WriteString("\n")
-	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
 	return s.String()
 }

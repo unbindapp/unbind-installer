@@ -65,7 +65,7 @@ func viewDNSConfig(m Model) string {
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
-	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+q to quit"))
+	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
 	return s.String()
 }
