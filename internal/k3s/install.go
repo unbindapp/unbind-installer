@@ -120,11 +120,14 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 		// Always send messages when:
 		// 1. There's an error
 		// 2. Status has changed (especially to completed or failed)
-		// 3. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
-		// 4. It's been at least minimum interval since last update
+		// 3. Description has changed (ensures all steps are shown)
+		// 4. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
+		// 5. Progress has changed significantly (>= 1%)
+		// 6. It's been at least minimum interval since last update
 		shouldSendUpdate := (err != nil) ||
 			(status != self.state.lastMsg.Status) ||
-			(progress-self.state.lastMsg.Progress >= 0.05) ||
+			(description != "" && description != self.state.lastMsg.Description) ||
+			(progress-self.state.lastMsg.Progress >= 0.01) ||
 			(progress == 0.0 || progress == 0.25 || progress == 0.5 || progress == 0.75 || progress == 1.0) ||
 			now.Sub(lastProgressUpdateTime) >= minProgressInterval
 

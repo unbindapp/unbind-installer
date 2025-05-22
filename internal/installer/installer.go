@@ -211,17 +211,24 @@ func (self *UnbindInstaller) sendUpdateMessage(name string) {
 	now := time.Now()
 	lastUpdate, exists := lastProgressUpdateTimes[name]
 
+	// Check if description has changed from the last update
+	descriptionChanged := state.description != "" && 
+		(len(state.stepHistory) > 0 && state.stepHistory[len(state.stepHistory)-1] != state.description)
+
 	// Always send messages when:
 	// 1. It's the first message for this dependency
 	// 2. Status has changed (especially to completed or failed)
 	// 3. There's an error
-	// 4. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
-	// 5. Progress has changed significantly (>= 5%)
-	// 6. It's been at least minProgressInterval since the last update
+	// 4. Description has changed (ensures all steps are shown)
+	// 5. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
+	// 6. Progress has changed significantly (>= 1%)
+	// 7. It's been at least minProgressInterval since the last update
 	shouldSendUpdate := !exists ||
 		state.status != StatusInstalling ||
 		state.error != nil ||
+		descriptionChanged ||
 		state.progress == 0.0 || state.progress == 0.25 || state.progress == 0.5 || state.progress == 0.75 || state.progress == 1.0 ||
+		(exists && state.progress >= 0.01) ||
 		now.Sub(lastUpdate) >= minProgressInterval
 
 	if shouldSendUpdate {
