@@ -145,7 +145,7 @@ func GetAvailableDiskSpaceGB(logChan chan<- string) (float64, error) {
 	return availableGB, nil
 }
 
-// applySysctlSettings ensures desired sysctl parameters are set in a config file and applies them.
+// applySysctlSettings manages kernel settings for swap
 func applySysctlSettings(logChan chan<- string, settings map[string]string, confFile string) error {
 	logChan <- fmt.Sprintf("Applying sysctl settings to %s...", confFile)
 	needsUpdate := false // Flag to track if sysctl -p needs running
@@ -285,7 +285,7 @@ func applySysctlSettings(logChan chan<- string, settings map[string]string, conf
 	return nil
 }
 
-// CreateSwapFile creates, formats, activates, persists a swap file, and applies sysctl tuning.
+// CreateSwapFile sets up and enables a system swap file
 func CreateSwapFile(sizeGB int, logChan chan<- string) error {
 	if os.Geteuid() != 0 {
 		return errdefs.ErrNotRoot // Ensure we run as root

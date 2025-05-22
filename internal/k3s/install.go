@@ -13,14 +13,14 @@ import (
 	"time"
 )
 
-// InstallationStep defines a step in the installation process
+// InstallationStep represents a single step in the k3s setup
 type InstallationStep struct {
 	Description string
 	Progress    float64
 	Action      func(context.Context) error
 }
 
-// K3SUpdateMessage is sent when a K3S installation status is updated
+// K3SUpdateMessage contains progress info for the UI
 type K3SUpdateMessage struct {
 	Progress    float64   // Progress from 0.0 to 1.0
 	Status      string    // Current status: "pending", "installing", "completed", "failed"
@@ -31,7 +31,7 @@ type K3SUpdateMessage struct {
 	StepHistory []string  // History of steps executed
 }
 
-// Installer handles installation of K3S
+// Installer manages k3s setup
 type Installer struct {
 	// Channel to send log messages
 	LogChan chan<- string
@@ -46,7 +46,7 @@ type Installer struct {
 	}
 }
 
-// NewInstaller creates a new K3S Installer
+// NewInstaller creates an installer instance
 func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage) *Installer {
 	inst := &Installer{
 		LogChan:    logChan,
@@ -63,7 +63,7 @@ func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage) *In
 var lastProgressUpdateTime time.Time
 var minProgressInterval = 100 * time.Millisecond // Reduced interval for smoother updates
 
-// logProgress sends a log message, progress update, and update message
+// logProgress tracks install progress
 func (self *Installer) logProgress(progress float64, status string, description string, err error) {
 	// Send log message only if it's a new description
 	if description != "" && description != self.state.lastMsg.Description {
@@ -85,14 +85,14 @@ func (self *Installer) logProgress(progress float64, status string, description 
 	self.sendUpdateMessage(progress, status, description, err)
 }
 
-// log sends a message to the log channel if available
+// log outputs a message to the channel
 func (self *Installer) log(message string) {
 	if self.LogChan != nil {
 		self.LogChan <- message
 	}
 }
 
-// sendUpdateMessage sends a detailed update message
+// sendUpdateMessage pushes progress updates to UI
 func (self *Installer) sendUpdateMessage(progress float64, status string, description string, err error) {
 	msg := K3SUpdateMessage{
 		Progress:    progress,
@@ -135,7 +135,7 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 	}
 }
 
-// contains checks if a string is in a slice
+// contains - simple string-in-slice check
 func contains(slice []string, s string) bool {
 	for _, item := range slice {
 		if item == s {
@@ -145,8 +145,7 @@ func contains(slice []string, s string) bool {
 	return false
 }
 
-// Install installs K3S using a step-based approach with progress tracking
-// Returns kube config path if successful, or an error if it fails
+// Install sets up k3s and returns the kubeconfig path
 func (self *Installer) Install(ctx context.Context) (string, error) {
 	k3sInstallFlags := "--disable=traefik --kubelet-arg=fail-swap-on=false"
 
@@ -769,17 +768,17 @@ fs.inotify.max_user_instances = 2099999999`
 	return kubeconfigPath, nil
 }
 
-// GetLastUpdateMessage returns the most recent update message
+// GetLastUpdateMessage returns current status
 func (self *Installer) GetLastUpdateMessage() K3SUpdateMessage {
 	return self.state.lastMsg
 }
 
-// GetInstallationState returns the current installation state
+// GetInstallationState returns status with timing info
 func (self *Installer) GetInstallationState() (status string, startTime time.Time, endTime time.Time) {
 	return self.state.status, self.state.startTime, self.state.endTime
 }
 
-// checkServiceStatus checks if the K3S service is active
+// checkServiceStatus checks k3s service state
 func (self *Installer) checkServiceStatus() (string, error) {
 	checkCmd := exec.Command("systemctl", "is-active", "k3s.service")
 	statusOutput, err := checkCmd.CombinedOutput()
@@ -788,7 +787,7 @@ func (self *Installer) checkServiceStatus() (string, error) {
 	return statusStr, err
 }
 
-// collectServiceDiagnostics collects detailed diagnostics about the K3S service
+// collectServiceDiagnostics gathers info for troubleshooting
 func (self *Installer) collectServiceDiagnostics() error {
 	// Get detailed service status
 	statusCmd := exec.Command("systemctl", "status", "-l", "k3s.service")
@@ -829,7 +828,7 @@ func (self *Installer) collectServiceDiagnostics() error {
 	return nil
 }
 
-// Helper function to download a file
+// downloadFile grabs remote files
 func (self *Installer) downloadFile(url, filepath string) error {
 	// Create the file
 	out, err := os.Create(filepath)
@@ -854,7 +853,7 @@ func (self *Installer) downloadFile(url, filepath string) error {
 	return err
 }
 
-// Helper function to check if we can write to a directory
+// canWriteToDir tests directory write permissions
 func canWriteToDir(dir string) bool {
 	testFile := filepath.Join(dir, ".helm_write_test")
 	err := os.WriteFile(testFile, []byte("test"), 0644)

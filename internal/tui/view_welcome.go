@@ -91,7 +91,7 @@ func (m Model) updateWelcomeState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		if keyMsg.String() == "enter" {
 			// When Enter is pressed on the welcome screen,
-			// transition to the loading state and start OS detection
+			// transition to the k3s check state and start checking
 			m.state = StateCheckK3s
 			m.isLoading = true
 			return m, tea.Batch(

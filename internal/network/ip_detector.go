@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-// IPInfo holds detected IP address information
+// IPInfo stores network addressing details
 type IPInfo struct {
 	InternalIP string
 	ExternalIP string
 	CIDR       string
 }
 
-// DetectIPs attempts to detect the internal and external IP addresses
+// DetectIPs finds network addressing info
 func DetectIPs(logFn func(string)) (*IPInfo, error) {
 	ipInfo := &IPInfo{}
 
@@ -58,7 +58,7 @@ func DetectIPs(logFn func(string)) (*IPInfo, error) {
 	return ipInfo, nil
 }
 
-// detectInternalIP attempts to detect the internal IP address
+// detectInternalIP tries to find the local IP
 func detectInternalIP() (string, error) {
 	// First try: Use Go's net package
 	conn, err := net.Dial("udp", "8.8.8.8:80")
@@ -114,7 +114,7 @@ func detectInternalIP() (string, error) {
 	return "", fmt.Errorf("could not detect internal IP address")
 }
 
-// detectExternalIP attempts to detect the external IP address
+// detectExternalIP finds the public-facing IP
 func detectExternalIP() (string, error) {
 	// List of services to try
 	services := []string{
@@ -148,9 +148,8 @@ func detectExternalIP() (string, error) {
 	return "", fmt.Errorf("could not detect external IP address")
 }
 
-// getPrimaryInterface finds the primary network interface
-// It first looks for the interface with the default route
-// If that fails, it finds the first non-loopback interface
+// getPrimaryInterface finds the main network interface
+// Tries default route first, falls back to first active interface
 func getPrimaryInterface() (*net.Interface, error) {
 	// Get all network interfaces
 	interfaces, err := net.Interfaces()
@@ -205,7 +204,7 @@ func getPrimaryInterface() (*net.Interface, error) {
 	return nil, fmt.Errorf("no suitable network interface found")
 }
 
-// detectNetworkCIDR gets the network CIDR for the primary interface
+// detectNetworkCIDR gets the network CIDR
 func detectNetworkCIDR() (string, error) {
 	iface, err := getPrimaryInterface()
 	if err != nil {
@@ -227,12 +226,12 @@ func detectNetworkCIDR() (string, error) {
 	return "", fmt.Errorf("no IPv4 address found for interface %s", iface.Name)
 }
 
-// ValidateIP checks if a provided IP address is valid
+// ValidateIP - simple IP format check
 func ValidateIP(ip string) bool {
 	return net.ParseIP(ip) != nil
 }
 
-// CheckCloudflareProxy checks if a domain is proxied through Cloudflare using official IP ranges
+// CheckCloudflareProxy detects Cloudflare proxying
 func CheckCloudflareProxy(domain string, logFn func(string)) bool {
 	logFn(fmt.Sprintf("Checking if %s is using Cloudflare...", domain))
 
@@ -284,7 +283,7 @@ func CheckCloudflareProxy(domain string, logFn func(string)) bool {
 	return false
 }
 
-// fetchCloudflareIPRanges fetches Cloudflare's IP ranges from their official URLs
+// fetchCloudflareIPRanges gets CF IP ranges for checking
 func fetchCloudflareIPRanges(logFn func(string)) ([]*net.IPNet, []*net.IPNet, error) {
 	ipv4URL := "https://www.cloudflare.com/ips-v4"
 	ipv6URL := "https://www.cloudflare.com/ips-v6"
@@ -328,7 +327,7 @@ func fetchCloudflareIPRanges(logFn func(string)) ([]*net.IPNet, []*net.IPNet, er
 	return parsedIPv4Ranges, parsedIPv6Ranges, nil
 }
 
-// fetchIPRanges fetches IP ranges from a URL and returns them as a slice of strings
+// fetchIPRanges downloads IP ranges from URL
 func fetchIPRanges(url string) ([]string, error) {
 	// Create HTTP client with reasonable timeout
 	client := &http.Client{
@@ -367,7 +366,7 @@ func fetchIPRanges(url string) ([]string, error) {
 	return cleanRanges, nil
 }
 
-// ValidateDNS checks if a domain is correctly pointing to an IP using Go's net package
+// ValidateDNS verifies DNS record points to expected IP
 func ValidateDNS(domain string, expectedIP string, logFn func(string)) bool {
 	logFn(fmt.Sprintf("Validating DNS for %s...", domain))
 
@@ -398,7 +397,7 @@ func ValidateDNS(domain string, expectedIP string, logFn func(string)) bool {
 	return false
 }
 
-// RunNetworkCommand executes a network-related command and returns its output
+// RunNetworkCommand runs a command and gets output
 func RunNetworkCommand(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	var out bytes.Buffer

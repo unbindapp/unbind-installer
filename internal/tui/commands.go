@@ -281,13 +281,6 @@ func (self Model) detectWildcard(base string) (dnsValid, behindCF bool) {
 	return dnsValid, behindCF
 }
 
-// dnsValidationTimeout creates a timeout for DNS validation
-func dnsValidationTimeout(duration time.Duration) tea.Cmd {
-	return tea.Tick(duration, func(time.Time) tea.Msg {
-		return dnsValidationTimeoutMsg{}
-	})
-}
-
 // installK3S is a command that installs K3S
 func (self Model) installK3S() tea.Cmd {
 	return func() tea.Msg {

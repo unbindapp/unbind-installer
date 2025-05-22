@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -201,6 +202,22 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return self, self.listenForLogs()
 	}
 
+	// Handle progress channel cleanup signals
+	if _, ok := msg.(k3sProgressCompletedMsg); ok {
+		// Stop listening for k3s progress updates
+		return self, nil
+	}
+
+	if _, ok := msg.(packageProgressCompletedMsg); ok {
+		// Stop listening for package progress updates
+		return self, nil
+	}
+
+	if _, ok := msg.(unbindProgressCompletedMsg); ok {
+		// Stop listening for unbind progress updates
+		return self, nil
+	}
+
 	// Delegate to state-specific handlers
 	var model tea.Model
 	var cmd tea.Cmd
@@ -340,6 +357,61 @@ func (self Model) View() string {
 	}
 }
 
+// transition is a helper to cleanly transition between states
+func (self Model) transition(newState ApplicationState, isLoading bool, additionalCmds ...tea.Cmd) (tea.Model, tea.Cmd) {
+	// Update model state directly
+	self.state = newState
+	self.isLoading = isLoading
+
+	cmds := []tea.Cmd{}
+
+	// Add spinner tick if loading
+	if isLoading {
+		cmds = append(cmds, self.spinner.Tick)
+	}
+
+	// Add all additional commands
+	cmds = append(cmds, additionalCmds...)
+
+	// Process state transition with all commands
+	return self.processStateUpdate(tea.Batch(cmds...))
+}
+
+// handleError standardizes error handling across the application
+func (self Model) handleError(err error, format string, a ...interface{}) (tea.Model, tea.Cmd) {
+	var errorMsg string
+	if len(a) > 0 {
+		errorMsg = fmt.Sprintf(format, a...)
+	} else {
+		errorMsg = format
+	}
+
+	// Set the error
+	self.err = fmt.Errorf("%s: %w", errorMsg, err)
+
+	// Log the error
+	self.logChan <- fmt.Sprintf("ERROR: %s", self.err.Error())
+
+	// Directly set error state instead of using transition
+	self.state = StateError
+	self.isLoading = false
+	return self, self.listenForLogs()
+}
+
+// handleYesNoChoice standardizes the handling of yes/no confirmation screens
+func (self Model) handleYesNoChoice(key string, yesState, noState ApplicationState, yesLoading, noLoading bool, yesCmds, noCmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	switch strings.ToLower(key) {
+	case "y":
+		return self.transition(yesState, yesLoading, yesCmds...)
+	case "n":
+		return self.transition(noState, noLoading, noCmds...)
+	case "q":
+		return self, tea.Quit
+	default:
+		return self, self.listenForLogs()
+	}
+}
+
 // listenForLogs returns a command that listens for log messages
 func (self Model) listenForLogs() tea.Cmd {
 	return func() tea.Msg {
@@ -364,13 +436,20 @@ func (self Model) listenForK3SProgress() tea.Cmd {
 		select {
 		case msg, ok := <-self.k3sProgressChan:
 			if !ok {
-				// Channel closed
-				return nil
+				// Channel closed, send completion message to stop this listener
+				return k3sProgressCompletedMsg{}
+			}
+			// Check if this is a completion message (progress = 1.0 and status = completed)
+			if msg.Progress >= 1.0 && msg.Status == "completed" {
+				// Send one more update after a short delay to ensure UI shows completion
+				go func() {
+					time.Sleep(500 * time.Millisecond)
+					self.sendCompletionMessage(self.k3sProgressChan, msg)
+				}()
 			}
 			return msg
-		default:
-			// Sleep briefly to reduce CPU usage when no messages are available
-			time.Sleep(10 * time.Millisecond)
+		case <-time.After(100 * time.Millisecond):
+			// Use timeout instead of default to reduce CPU usage
 			return nil
 		}
 	}
@@ -382,14 +461,52 @@ func (self Model) listenForPackageProgress() tea.Cmd {
 		select {
 		case msg, ok := <-self.packageProgressChan:
 			if !ok {
-				// Channel closed
-				return nil
+				// Channel closed, send completion message to stop this listener
+				return packageProgressCompletedMsg{}
+			}
+			// Check if this is a completion message (isComplete = true)
+			if msg.isComplete {
+				// Send one more update after a short delay to ensure UI shows completion
+				go func() {
+					time.Sleep(500 * time.Millisecond)
+					self.sendCompletionMessage(self.packageProgressChan, msg)
+				}()
 			}
 			return msg
-		default:
-			// Sleep briefly to reduce CPU usage when no messages are available
-			time.Sleep(10 * time.Millisecond)
+		case <-time.After(100 * time.Millisecond):
+			// Use timeout instead of default to reduce CPU usage
 			return nil
+		}
+	}
+}
+
+// sendCompletionMessage safely sends a completion message to a channel
+func (self Model) sendCompletionMessage(channel interface{}, msg interface{}) {
+	// Type switch to handle different channel types
+	switch ch := channel.(type) {
+	case chan<- packageInstallProgressMsg:
+		if m, ok := msg.(packageInstallProgressMsg); ok && ch != nil {
+			select {
+			case ch <- m:
+			default:
+				// Channel might be full or closed, ignore
+			}
+		}
+	case chan<- k3s.K3SUpdateMessage:
+		if m, ok := msg.(k3s.K3SUpdateMessage); ok && ch != nil {
+			select {
+			case ch <- m:
+			default:
+				// Channel might be full or closed, ignore
+			}
+		}
+	case chan<- installer.UnbindInstallUpdateMsg:
+		if m, ok := msg.(installer.UnbindInstallUpdateMsg); ok && ch != nil {
+			select {
+			case ch <- m:
+			default:
+				// Channel might be full or closed, ignore
+			}
 		}
 	}
 }
@@ -400,33 +517,86 @@ func (self Model) listenForUnbindProgress() tea.Cmd {
 		select {
 		case msg, ok := <-self.unbindProgressChan:
 			if !ok {
-				// Channel closed
-				return nil
+				// Channel closed, send completion message to stop this listener
+				return unbindProgressCompletedMsg{}
+			}
+			// Check if this is a completion message (progress = 1.0 and status = completed)
+			if msg.Progress >= 1.0 && msg.Status == installer.StatusCompleted {
+				// Send one more update after a short delay to ensure UI shows completion
+				go func() {
+					time.Sleep(500 * time.Millisecond)
+					self.sendCompletionMessage(self.unbindProgressChan, msg)
+				}()
 			}
 			return msg
-		default:
-			// Sleep briefly to reduce CPU usage when no messages are available
-			time.Sleep(10 * time.Millisecond)
+		case <-time.After(100 * time.Millisecond):
+			// Use timeout instead of default to reduce CPU usage
 			return nil
 		}
 	}
+}
+
+// progressListenerMap defines which states need which progress listeners
+var progressListenerMap = map[ApplicationState]struct {
+	pkgInstallListener    bool
+	k3sInstallListener    bool
+	unbindInstallListener bool
+}{
+	StateInstallingPackages: {pkgInstallListener: true},
+	StateInstallingK3S:      {k3sInstallListener: true},
+	StateInstallingUnbind:   {unbindInstallListener: true},
 }
 
 // processStateUpdate is a helper function to batch common commands for state updates
 func (self Model) processStateUpdate(cmd tea.Cmd, additionalCmds ...tea.Cmd) (tea.Model, tea.Cmd) {
 	allCmds := []tea.Cmd{cmd, self.listenForLogs()}
 
-	// Only add active progress listeners
-	if self.state == StateInstallingPackages && self.packageProgressChan != nil {
-		allCmds = append(allCmds, self.listenForPackageProgress())
+	// Get listener configuration for current state
+	listeners, hasMapping := progressListenerMap[self.state]
+
+	// Add appropriate listeners based on current state
+	if hasMapping {
+		// Package installation progress listener
+		if listeners.pkgInstallListener && self.packageProgressChan != nil {
+			allCmds = append(allCmds, self.listenForPackageProgress())
+		}
+
+		// K3S installation progress listener
+		if listeners.k3sInstallListener && self.k3sProgressChan != nil {
+			allCmds = append(allCmds, self.listenForK3SProgress())
+		}
+
+		// Unbind installation progress listener
+		if listeners.unbindInstallListener && self.unbindProgressChan != nil {
+			allCmds = append(allCmds, self.listenForUnbindProgress())
+		}
 	}
 
-	if self.state == StateInstallingK3S && self.k3sProgressChan != nil {
-		allCmds = append(allCmds, self.listenForK3SProgress())
-	}
+	// Handle state transition completion messages
+	switch self.state {
+	case StateInstallComplete:
+		// Send package installation completion
+		self.sendCompletionMessage(self.packageProgressChan, packageInstallProgressMsg{
+			isComplete: true,
+			progress:   1.0,
+			step:       "Installation complete",
+		})
 
-	if self.state == StateInstallingUnbind && self.unbindProgressChan != nil {
-		allCmds = append(allCmds, self.listenForUnbindProgress())
+	case StateInstallingUnbind:
+		// K3S installation completed when we reach Unbind install
+		self.sendCompletionMessage(self.k3sProgressChan, k3s.K3SUpdateMessage{
+			Progress:    1.0,
+			Status:      "completed",
+			Description: "K3S installation completed",
+		})
+
+	case StateInstallationComplete:
+		// Unbind installation completed
+		self.sendCompletionMessage(self.unbindProgressChan, installer.UnbindInstallUpdateMsg{
+			Progress:    1.0,
+			Status:      installer.StatusCompleted,
+			Description: "Installation complete",
+		})
 	}
 
 	// Add any additional commands

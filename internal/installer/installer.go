@@ -19,7 +19,7 @@ type UnbindInstaller struct {
 	kubeConfigPath string
 }
 
-// dependencyState tracks installation state for a dependency
+// dependencyState tracks status info for each component
 type dependencyState struct {
 	name        string
 	startTime   time.Time
@@ -31,7 +31,7 @@ type dependencyState struct {
 	stepHistory []string // History of steps executed
 }
 
-// InstallationStep defines a step in the installation process
+// InstallationStep represents a single installation task
 type InstallationStep struct {
 	Description string
 	Progress    float64
@@ -61,7 +61,7 @@ func NewUnbindInstaller(kubeConfig string, logChan chan<- string, progressChan c
 	}, nil
 }
 
-// InstallDependencyWithSteps installs a dependency using a series of installation steps
+// InstallDependencyWithSteps runs the installation sequence
 func (self *UnbindInstaller) InstallDependencyWithSteps(
 	ctx context.Context,
 	dependencyName string,
@@ -105,7 +105,7 @@ func (self *UnbindInstaller) InstallDependencyWithSteps(
 	return nil
 }
 
-// ensureStateInitialized makes sure a dependency has state tracking initialized
+// ensureStateInitialized sets up tracking if needed
 func (self *UnbindInstaller) ensureStateInitialized(name string) {
 	if _, exists := self.state[name]; !exists {
 		self.state[name] = &dependencyState{
@@ -117,7 +117,7 @@ func (self *UnbindInstaller) ensureStateInitialized(name string) {
 	}
 }
 
-// InstallerStatus represents the state of a dependency installation
+// InstallerStatus - possible status values
 type InstallerStatus string
 
 const (
@@ -127,7 +127,7 @@ const (
 	StatusFailed     InstallerStatus = "failed"
 )
 
-// UnbindInstallUpdateMsg is sent when a dependency status change
+// UnbindInstallUpdateMsg for UI progress updates
 type UnbindInstallUpdateMsg struct {
 	Name        string
 	Status      InstallerStatus
@@ -139,14 +139,14 @@ type UnbindInstallUpdateMsg struct {
 	StepHistory []string  // History of steps executed
 }
 
-// DependencyInstallCompleteMsg is sent when all dependencies are installed
+// DependencyInstallCompleteMsg signals installation finished
 type DependencyInstallCompleteMsg struct{}
 
 // Last time we sent a progress update for each dependency
 var lastProgressUpdateTimes = make(map[string]time.Time)
 var minProgressInterval = 100 * time.Millisecond // Reduced interval for smoother updates
 
-// logProgress unifies logging, state tracking, and progress updates
+// logProgress handles all state/progress tracking
 func (self *UnbindInstaller) logProgress(name string, progress float64, description string, err error, status InstallerStatus) {
 	// Ensure state is initialized
 	self.ensureStateInitialized(name)
@@ -183,7 +183,7 @@ func (self *UnbindInstaller) logProgress(name string, progress float64, descript
 	self.sendUpdateMessage(name)
 }
 
-// sendUpdateMessage sends the current state as an update message
+// sendUpdateMessage pushes updates to the UI
 func (self *UnbindInstaller) sendUpdateMessage(name string) {
 	if self.progressChan == nil {
 		return
@@ -236,14 +236,14 @@ func (self *UnbindInstaller) sendUpdateMessage(name string) {
 	}
 }
 
-// log sends a message to the log channel if available
+// sendLog outputs messages to the log channel
 func (self *UnbindInstaller) sendLog(message string) {
 	if self.LogChan != nil {
 		self.LogChan <- message
 	}
 }
 
-// GetDependencyState returns the current state of a dependency
+// GetDependencyState grabs status info for a component
 func (self *UnbindInstaller) GetDependencyState(name string) (InstallerStatus, time.Time, time.Time, []string) {
 	if state, exists := self.state[name]; exists {
 		return state.status, state.startTime, state.endTime, append([]string{}, state.stepHistory...)
@@ -251,7 +251,7 @@ func (self *UnbindInstaller) GetDependencyState(name string) (InstallerStatus, t
 	return StatusPending, time.Time{}, time.Time{}, []string{}
 }
 
-// GetLastUpdateMessage returns the most recent update message for a dependency
+// GetLastUpdateMessage grabs latest status
 func (self *UnbindInstaller) GetLastUpdateMessage(name string) UnbindInstallUpdateMsg {
 	if state, exists := self.state[name]; exists {
 		return UnbindInstallUpdateMsg{

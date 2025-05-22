@@ -148,8 +148,10 @@ func (m Model) updateCheckingSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case swapCheckResultMsg:
 		m.isLoading = false
 		if msg.err != nil {
-			m.err = fmt.Errorf("failed to check swap status: %w", msg.err)
+			// Handle error with our error helper
+			m.err = fmt.Errorf("Failed to check swap status: %w", msg.err)
 			m.state = StateError
+			m.logChan <- fmt.Sprintf("ERROR: %s", m.err.Error())
 			return m, m.listenForLogs()
 		}
 
@@ -161,14 +163,15 @@ func (m Model) updateCheckingSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			// No swap, transition to confirm create swap state
 			m.state = StateConfirmCreateSwap
-			m.isLoading = true // Show spinner while getting disk space
+			m.isLoading = true
 			return m, tea.Batch(m.spinner.Tick, m.getDiskSpaceCommand(), m.listenForLogs())
 		}
 
 	case errMsg:
-		m.isLoading = false
-		m.err = msg.err
+		// Handle error with our error helper
+		m.err = fmt.Errorf("Error checking swap: %w", msg.err)
 		m.state = StateError
+		m.logChan <- fmt.Sprintf("ERROR: %s", m.err.Error())
 		return m, m.listenForLogs()
 
 	case spinner.TickMsg:
@@ -201,21 +204,21 @@ func (m Model) updateConfirmCreateSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.listenForLogs()
 
 	case tea.KeyMsg:
-		switch strings.ToLower(msg.String()) {
-		case "y":
+		// Special case for Yes action which needs additional setup
+		if strings.ToLower(msg.String()) == "y" {
 			m.state = StateEnterSwapSize
+			m.isLoading = false
 			m.swapSizeInput.Focus()
 			m.swapSizeInput.SetValue("")
 			m.swapSizeInputErr = nil
 			return m, textinput.Blink
-		case "n":
-			// User doesn't want swap, skip to next step
-			m.state = StateInstallingPackages
-			m.isLoading = true
-			return m, tea.Batch(m.spinner.Tick, m.installRequiredPackages(), m.listenForLogs())
-		case "q":
+		} else if strings.ToLower(msg.String()) == "n" {
+			// Skip to package installation
+			return m.transition(StateInstallingPackages, true, m.installRequiredPackages())
+		} else if msg.String() == "q" {
 			return m, tea.Quit
 		}
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		if m.isLoading {
@@ -231,6 +234,7 @@ func (m Model) updateEnterSwapSizeState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
+	// Always update the input field
 	m.swapSizeInput, cmd = m.swapSizeInput.Update(msg)
 	cmds = append(cmds, cmd)
 	m.swapSizeInputErr = nil
@@ -238,8 +242,11 @@ func (m Model) updateEnterSwapSizeState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
 		case "enter":
+			// Validate the input
 			valStr := m.swapSizeInput.Value()
 			sizeGB, err := strconv.Atoi(valStr)
+
+			// Input validation
 			if err != nil {
 				m.swapSizeInputErr = fmt.Errorf("invalid input: '%s' is not a number", valStr)
 				return m, tea.Batch(cmds...)
@@ -254,10 +261,8 @@ func (m Model) updateEnterSwapSizeState(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 
-			m.state = StateCreatingSwap
-			m.isLoading = true
-			cmds = append(cmds, m.spinner.Tick, m.createSwapCommand(sizeGB), m.listenForLogs())
-			return m, tea.Batch(cmds...)
+			// Input is valid, transition to the next state
+			return m.transition(StateCreatingSwap, true, m.createSwapCommand(sizeGB))
 
 		case "q":
 			return m, tea.Quit
@@ -273,21 +278,24 @@ func (m Model) updateCreatingSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case swapCreateResultMsg:
 		m.isLoading = false
 		if msg.err != nil {
-			m.err = fmt.Errorf("failed to create swap file: %w", msg.err)
+			// Handle error directly
+			m.err = fmt.Errorf("Failed to create swap file: %w", msg.err)
 			m.state = StateError
+			m.logChan <- fmt.Sprintf("ERROR: %s", m.err.Error())
 			return m, m.listenForLogs()
 		}
 		// Swap created successfully
 		m.state = StateSwapCreated
-		// Add a small delay before auto-advancing from success state
+		m.isLoading = false
 		return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 			return autoAdvanceMsg{}
 		})
 
 	case errMsg:
-		m.isLoading = false
-		m.err = msg.err
+		// Handle error directly
+		m.err = fmt.Errorf("Error creating swap: %w", msg.err)
 		m.state = StateError
+		m.logChan <- fmt.Sprintf("ERROR: %s", m.err.Error())
 		return m, m.listenForLogs()
 
 	case spinner.TickMsg:
@@ -310,6 +318,7 @@ func (m Model) updateCreatingSwapState(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) updateSwapCreatedState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// This state just shows success and waits for Enter or auto-advances
 	advance := func() (tea.Model, tea.Cmd) {
+		// Set state directly
 		m.state = StateInstallingPackages
 		m.isLoading = true
 		return m, tea.Batch(m.spinner.Tick, m.installRequiredPackages(), m.listenForLogs())

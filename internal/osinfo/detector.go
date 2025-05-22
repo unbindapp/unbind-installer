@@ -9,7 +9,7 @@ import (
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
 )
 
-// SupportedDistros is a list of supported Linux distributions
+// List of distros we officially support
 var AllSupportedDistros = []string{
 	"ubuntu",
 	"debian",
@@ -44,7 +44,7 @@ var AllSupportedDistrosVersions = map[string][]string{
 	},
 }
 
-// OSInfo holds information about the operating system
+// OSInfo contains OS details
 type OSInfo struct {
 	Distribution string
 	Version      string
@@ -66,7 +66,7 @@ func getGoarch() string {
 	return runtime.GOARCH
 }
 
-// IsVersionSupported checks if a version is supported for a given distribution
+// IsVersionSupported checks compatibility
 func IsVersionSupported(distribution, version string) bool {
 	versions, ok := AllSupportedDistrosVersions[distribution]
 	if !ok {
@@ -83,7 +83,7 @@ func IsVersionSupported(distribution, version string) bool {
 	return slices.Contains(versions, version)
 }
 
-// GetOSInfo detects the current OS and returns information about it
+// GetOSInfo figures out what we're running on
 func GetOSInfo() (*OSInfo, error) {
 	if getOoosFunc() != "linux" {
 		return nil, errdefs.NewCustomError(errdefs.ErrTypeNotLinux, fmt.Sprintf("Only linux is supported, but I found %s", runtime.GOOS))

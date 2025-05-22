@@ -7,20 +7,20 @@ import (
 	"time"
 )
 
-// AptInstaller handles installation of apt packages
+// AptInstaller for Debian-based systems
 type AptInstaller struct {
 	// Channel to send log messages
 	LogChan chan<- string
 }
 
-// NewAptInstaller creates a new AptInstaller
+// NewAptInstaller creates apt package manager
 func NewAptInstaller(logChan chan<- string) *AptInstaller {
 	return &AptInstaller{
 		LogChan: logChan,
 	}
 }
 
-// InstallPackages installs the specified packages using apt-get
+// InstallPackages handles apt package installation
 func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string, progressFunc ProgressFunc) error {
 	if len(packages) == 0 {
 		return nil
@@ -98,7 +98,7 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 	}
 }
 
-// log sends a message to the log channel if available
+// log writes to log channel
 func (self *AptInstaller) log(message string) {
 	if self.LogChan != nil {
 		self.LogChan <- message

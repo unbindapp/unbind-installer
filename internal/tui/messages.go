@@ -8,7 +8,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// * Common message types
+// Common message types
 type errMsg struct {
 	err error
 }
@@ -17,12 +17,12 @@ type logMsg struct {
 	message string
 }
 
-// * OS check message
+// OS check message
 type osInfoMsg struct {
 	info *osinfo.OSInfo
 }
 
-// * Swap check messages
+// Swap check messages
 type swapCheckResultMsg struct {
 	isEnabled bool
 	err       error
@@ -37,7 +37,7 @@ type swapCreateResultMsg struct {
 	err error
 }
 
-// * Package manager messages
+// Package manager messages
 type installPackagesMsg struct{}
 
 type installCompleteMsg struct{}
@@ -49,7 +49,7 @@ type packageInstallProgressMsg struct {
 	isComplete  bool
 }
 
-// * DNS-related messages
+// DNS-related messages
 type detectIPsMsg struct{}
 
 type detectIPsCompleteMsg struct {
@@ -70,7 +70,7 @@ type dnsValidationTimeoutMsg struct{}
 
 type manualContinueMsg struct{}
 
-// * K3S
+// K3S messages
 
 type k3sInstallCompleteMsg struct {
 	kubeConfig      string
@@ -83,16 +83,27 @@ type k3sCheckResultMsg struct {
 	err         error
 }
 
-// k3sUninstallCompleteMsg is sent when the K3s uninstall process finishes.
+// k3sUninstallCompleteMsg for uninstall completion
 type k3sUninstallCompleteMsg struct {
 	err error
 }
 
-// * Dependencies
-// unbindInstallCompleteMsg is sent when all dependencies are installed
+// Dependencies
+// unbindInstallCompleteMsg signals all deps installed
 type unbindInstallCompleteMsg struct{}
 
-// registryValidationCompleteMsg is sent when registry credential validation completes
+// registryValidationCompleteMsg for credential check
 type registryValidationCompleteMsg struct {
 	success bool
 }
+
+// Progress channel completion signals
+
+// k3sProgressCompletedMsg to stop progress listener
+type k3sProgressCompletedMsg struct{}
+
+// packageProgressCompletedMsg to stop progress listener
+type packageProgressCompletedMsg struct{}
+
+// unbindProgressCompletedMsg to stop progress listener
+type unbindProgressCompletedMsg struct{}
