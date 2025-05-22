@@ -3,7 +3,6 @@ package installer
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"helm.sh/helm/v3/pkg/cli"
@@ -210,45 +209,16 @@ func (self *UnbindInstaller) sendUpdateMessage(name string) {
 	}
 	copy(msg.StepHistory, state.stepHistory)
 
-	// Throttle update sending to reduce UI thrashing
+	// Update the last update time
 	now := time.Now()
-	lastUpdate, exists := lastProgressUpdateTimes[name]
+	lastProgressUpdateTimes[name] = now
 
-	// Check if description has changed from the last update
-	descriptionChanged := state.description != "" && 
-		(len(state.stepHistory) > 0 && state.stepHistory[len(state.stepHistory)-1] != state.description)
-
-	// Always send messages when:
-	// 1. It's the first message for this dependency
-	// 2. Status has changed (especially to completed or failed)
-	// 3. There's an error
-	// 4. Description has changed (ensures all steps are shown)
-	// 5. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
-	// 6. Progress has changed significantly
-	// 7. It's been at least minProgressInterval since the last update
-	shouldSendUpdate := !exists ||
-		state.status != StatusInstalling ||
-		state.error != nil ||
-		descriptionChanged ||
-		state.progress == 0.0 || state.progress == 0.25 || state.progress == 0.5 || state.progress == 0.75 || state.progress == 1.0 ||
-		(exists && now.Sub(lastUpdate) >= 500*time.Millisecond)
-
-	// For long-running operations like Helmfile sync, use less frequent updates
-	if state.description != "" &&
-		(strings.Contains(state.description, "Running helmfile sync") ||
-		 strings.Contains(state.description, "Installing Unbind components")) {
-		shouldSendUpdate = !exists || now.Sub(lastUpdate) >= 2*time.Second
-	}
-
-	if shouldSendUpdate {
-		lastProgressUpdateTimes[name] = now
-		select {
-		case self.progressChan <- msg:
-			// Message sent successfully
-		default:
-			// Channel is full, log it but don't block
-			self.sendLog(fmt.Sprintf("Warning: Progress channel for %s is full", name))
-		}
+	select {
+	case self.progressChan <- msg:
+		// Message sent successfully
+	default:
+		// Channel is full, log it but don't block
+		self.sendLog(fmt.Sprintf("Warning: Progress channel for %s is full", name))
 	}
 }
 

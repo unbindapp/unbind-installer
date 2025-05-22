@@ -92,22 +92,20 @@ func viewInstallingK3S(m Model) string {
 
 	s.WriteString("\n\n")
 
-	// Display installation steps (history)
+	// Always display installation steps section even if empty
+	s.WriteString(m.styles.Bold.Render("Installation steps:"))
+	s.WriteString("\n")
+
 	if len(m.k3sProgress.StepHistory) > 0 {
-		s.WriteString(m.styles.Bold.Render("Installation steps:"))
-		s.WriteString("\n")
-
-		// Show last 3 steps
-		startIdx := 0
-		if len(m.k3sProgress.StepHistory) > 3 {
-			startIdx = len(m.k3sProgress.StepHistory) - 3
+		// Show all steps instead of just the last 3
+		for i, step := range m.k3sProgress.StepHistory {
+			s.WriteString(fmt.Sprintf("  %d. %s\n", i+1, m.styles.Subtle.Render(step)))
 		}
-
-		for i, step := range m.k3sProgress.StepHistory[startIdx:] {
-			s.WriteString(fmt.Sprintf("  %d. %s\n", startIdx+i+1, m.styles.Subtle.Render(step)))
-		}
-		s.WriteString("\n")
+	} else {
+		// Show a placeholder if no steps are available yet
+		s.WriteString("  Waiting for installation steps...\n")
 	}
+	s.WriteString("\n")
 
 	return s.String()
 }

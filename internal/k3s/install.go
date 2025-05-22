@@ -81,7 +81,7 @@ func (self *Installer) logProgress(progress float64, status string, description 
 	}
 
 	// Always update step history if it's a new description
-	if description != "" && (len(self.state.lastMsg.StepHistory) == 0 || 
+	if description != "" && (len(self.state.lastMsg.StepHistory) == 0 ||
 		self.state.lastMsg.StepHistory[len(self.state.lastMsg.StepHistory)-1] != description) {
 		self.state.lastMsg.StepHistory = append(self.state.lastMsg.StepHistory, description)
 	}
@@ -109,7 +109,7 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 		EndTime:     self.state.endTime,
 		StepHistory: make([]string, len(self.state.lastMsg.StepHistory)),
 	}
-	
+
 	// Make a copy of the step history to avoid mutation issues
 	copy(msg.StepHistory, self.state.lastMsg.StepHistory)
 
@@ -121,41 +121,15 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 		// Throttle update sending for efficiency
 		now := time.Now()
 
-		// Always send messages when:
-		// 1. There's an error
-		// 2. Status has changed (especially to completed or failed)
-		// 3. Description has changed (ensures all steps are shown)
-		// 4. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
-		// 5. Progress has changed (even small changes)
-		// 6. It's been at least minimum interval since last update
-		shouldSendUpdate := (err != nil) ||
-			(status != "installing") || // Always send for non-installing states
-			(description != "" && description != self.state.lastMsg.Description) ||
-			(now.Sub(lastProgressUpdateTime) >= 500*time.Millisecond) ||
-			(progress == 0.0 || progress == 0.25 || progress == 0.5 || progress == 0.75 || progress == 1.0) ||
-			false
-
-		if shouldSendUpdate {
-			lastProgressUpdateTime = now
-			select {
-			case self.UpdateChan <- msg:
-				// Message sent successfully
-			default:
-				// Channel is full, log it but don't block
-				self.log("Warning: Progress update channel is full")
-			}
+		lastProgressUpdateTime = now
+		select {
+		case self.UpdateChan <- msg:
+			// Message sent successfully
+		default:
+			// Channel is full, log it but don't block
+			self.log("Warning: Progress update channel is full")
 		}
 	}
-}
-
-// contains - simple string-in-slice check
-func contains(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
 }
 
 // Install sets up k3s and returns the kubeconfig path
