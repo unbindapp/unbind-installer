@@ -163,22 +163,22 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					currentProgress := 0.35
 
 					// Set up a ticker for progress updates
-					ticker := time.NewTicker(2 * time.Second)
+					ticker := time.NewTicker(500 * time.Millisecond)
 					defer ticker.Stop()
 
 					for {
 						select {
 						case <-ticker.C:
 							if currentProgress < 0.85 {
-								// Gradually increment progress
-								currentProgress += 0.005
-								
+								// Increment progress more quickly
+								currentProgress += 0.02
+
 								// Use current description or a default
 								description := self.state[dependencyName].description
 								if description == "" || description == "Running helmfile sync" {
 									description = "Installing Unbind components..."
 								}
-								
+
 								// Send progress update
 								self.logProgress(dependencyName, currentProgress, description, nil, StatusInstalling)
 							}
@@ -378,49 +378,64 @@ func isErrorMessage(message string) bool {
 	return false
 }
 
-// updateProgressBasedOnOutput updates the progress based on the output from helmfile
+// updateProgressBasedOnOutput updates the progress based on the output line
 func (self *UnbindInstaller) updateProgressBasedOnOutput(dependency string, output string) {
-	output = strings.TrimSpace(output)
-	if output == "" {
-		return
+	// Match known output lines to update progress and description
+	switch {
+	case containsString(output, "Processing chart"):
+		// Extract chart name if possible
+		parts := strings.Split(output, "Processing chart ")
+		chartName := "helm chart"
+		if len(parts) > 1 {
+			chartName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
+		}
+		self.logProgress(dependency, 0.40, fmt.Sprintf("Processing %s", chartName), nil, StatusInstalling)
+
+	case containsString(output, "Installing chart"):
+		// Extract chart name if possible
+		parts := strings.Split(output, "Installing chart ")
+		chartName := "helm chart"
+		if len(parts) > 1 {
+			chartName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
+		}
+		self.logProgress(dependency, 0.55, fmt.Sprintf("Installing %s", chartName), nil, StatusInstalling)
+
+	case containsString(output, "Installing release"):
+		// Extract release name if possible
+		parts := strings.Split(output, "Installing release ")
+		releaseName := "component"
+		if len(parts) > 1 {
+			releaseName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
+		}
+		self.logProgress(dependency, 0.65, fmt.Sprintf("Installing %s", releaseName), nil, StatusInstalling)
+
+	case containsString(output, "Building dependency release"):
+		self.logProgress(dependency, 0.75, "Building dependency releases", nil, StatusInstalling)
+
+	case containsString(output, "Upgrading release"):
+		// Extract release name if possible
+		parts := strings.Split(output, "Upgrading release ")
+		releaseName := "component"
+		if len(parts) > 1 {
+			releaseName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
+		}
+		self.logProgress(dependency, 0.80, fmt.Sprintf("Upgrading %s", releaseName), nil, StatusInstalling)
+
+	case containsString(output, "UPDATED RELEASES:"):
+		self.logProgress(dependency, 0.85, "Finalizing release updates", nil, StatusInstalling)
+
+	case containsString(output, "Deleting release"):
+		// Extract release name if possible
+		parts := strings.Split(output, "Deleting release ")
+		releaseName := "component"
+		if len(parts) > 1 {
+			releaseName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
+		}
+		self.logProgress(dependency, 0.90, fmt.Sprintf("Cleaning up %s", releaseName), nil, StatusInstalling)
+
+	case containsString(output, "DELETED RELEASES:") || containsString(output, "Listing releases matching"):
+		self.logProgress(dependency, 0.95, "Verifying installation", nil, StatusInstalling)
 	}
-
-	var progress float64
-	var description string
-
-	if containsString(output, "Building dependency release") {
-		progress = 0.35
-		description = "Building dependencies"
-	} else if containsString(output, "Processing releases") {
-		progress = 0.45
-		description = "Processing releases"
-	} else if containsString(output, "Fetching chart") {
-		progress = 0.50
-		description = "Fetching charts"
-	} else if containsString(output, "Preparing chart") || containsString(output, "Preparing values") {
-		progress = 0.55
-		description = "Preparing charts"
-	} else if containsString(output, "Starting diff") {
-		progress = 0.60
-		description = "Comparing differences"
-	} else if containsString(output, "release=") && containsString(output, "installed") {
-		progress = 0.70
-		description = "Installing releases"
-	} else if containsString(output, "release=") && containsString(output, "upgraded") {
-		progress = 0.75
-		description = "Upgrading releases"
-	} else if containsString(output, "Release was successful") {
-		progress = 0.80
-		description = "Release successful"
-	} else if containsString(output, "release=") && containsString(output, "skipped") {
-		progress = 0.85
-		description = "Skipping unchanged releases"
-	} else {
-		// No recognized pattern, don't update progress
-		return
-	}
-
-	self.logProgress(dependency, progress, description, nil, StatusInstalling)
 }
 
 // containsString is a helper function to check if a string contains a substring

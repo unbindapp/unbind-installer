@@ -116,12 +116,8 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 	// Always update local state
 	self.state.lastMsg = msg
 
-	// Only send to update channel based on criteria
+	// Send to update channel immediately without throttling
 	if self.UpdateChan != nil {
-		// Throttle update sending for efficiency
-		now := time.Now()
-
-		lastProgressUpdateTime = now
 		select {
 		case self.UpdateChan <- msg:
 			// Message sent successfully
@@ -212,15 +208,15 @@ fs.inotify.max_user_instances = 2099999999`
 				go func() {
 					currentProgress := 0.20
 
-					ticker := time.NewTicker(2 * time.Second)
+					ticker := time.NewTicker(500 * time.Millisecond)
 					defer ticker.Stop()
 
 					for {
 						select {
 						case <-ticker.C:
-							if currentProgress < 0.35 {
-								currentProgress += 0.03
-								self.logProgress(currentProgress, "installing", self.state.lastMsg.Description, nil)
+							if currentProgress < 0.80 {
+								currentProgress += 0.01
+								self.logProgress(currentProgress, "installing", "Installing K3S server components...", nil)
 							}
 						case <-installDone:
 							return
@@ -234,6 +230,9 @@ fs.inotify.max_user_instances = 2099999999`
 				installOutputStr := string(installOutput)
 
 				close(installDone)
+
+				// Report 80% progress after installer finishes
+				self.logProgress(0.80, "installing", "K3S server installed, configuring services...", nil)
 
 				self.log(fmt.Sprintf("Installation output: %s", installOutputStr))
 

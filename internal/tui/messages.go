@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	"github.com/unbindapp/unbind-installer/internal/installer"
 	"github.com/unbindapp/unbind-installer/internal/k3s"
 	"github.com/unbindapp/unbind-installer/internal/network"
@@ -47,6 +49,8 @@ type packageInstallProgressMsg struct {
 	progress    float64
 	step        string
 	isComplete  bool
+	startTime   time.Time
+	endTime     time.Time
 }
 
 // DNS-related messages

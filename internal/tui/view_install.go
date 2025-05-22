@@ -30,6 +30,53 @@ func viewInstallingPackages(m Model) string {
 		s.WriteString("\n\n")
 	}
 
+	// Package Installation Progress bar and status
+	s.WriteString(m.styles.Bold.Render("Package Installation:"))
+	s.WriteString("\n")
+
+	// Status indicator
+	if m.packageProgress.isComplete {
+		s.WriteString("  [✓] ")
+	} else if m.packageProgress.step != "" {
+		s.WriteString("  [*] ")
+	} else {
+		s.WriteString("  [ ] ")
+	}
+
+	// Label
+	s.WriteString(m.styles.Bold.Render("Packages"))
+	s.WriteString(": ")
+
+	// Current step description
+	if m.packageProgress.step != "" {
+		s.WriteString(m.styles.Subtle.Render(m.packageProgress.step))
+		s.WriteString("\n      ")
+	} else {
+		s.WriteString("\n      ")
+	}
+
+	// Progress bar width calculation
+	progressBarWidth := m.width - 40
+	if progressBarWidth < 20 {
+		progressBarWidth = 20
+	}
+
+	// Progress bar for installation
+	prog := m.styles.NewThemedProgress(progressBarWidth)
+	s.WriteString(prog.ViewAs(m.packageProgress.progress))
+
+	// Show completion status if complete
+	if m.packageProgress.isComplete {
+		if !m.packageProgress.startTime.IsZero() && !m.packageProgress.endTime.IsZero() {
+			duration := m.packageProgress.endTime.Sub(m.packageProgress.startTime).Round(time.Millisecond)
+			s.WriteString(fmt.Sprintf(" (completed in %s)", duration))
+		} else {
+			s.WriteString(" ✓")
+		}
+	}
+
+	s.WriteString("\n\n")
+
 	// Packages being installed
 	s.WriteString(m.styles.Bold.Render("Installing:"))
 	s.WriteString("\n")
@@ -45,36 +92,10 @@ func viewInstallingPackages(m Model) string {
 	for _, pkg := range packages {
 		s.WriteString(fmt.Sprintf("  %s %s\n", m.styles.Key.Render("•"), m.styles.Normal.Render(pkg)))
 	}
-
-	// Package installation progress
-	if m.packageProgress.step != "" {
-		s.WriteString("\n")
-		s.WriteString(m.styles.Bold.Render("Progress:"))
-		s.WriteString("\n")
-		s.WriteString(fmt.Sprintf("  %s\n", m.styles.Subtle.Render(m.packageProgress.step)))
-
-		// Progress bar width calculation
-		progressBarWidth := m.width - 40
-		if progressBarWidth < 20 {
-			progressBarWidth = 20
-		}
-
-		// Progress bar for installation
-		prog := m.styles.NewThemedProgress(progressBarWidth)
-		s.WriteString("  ")
-		s.WriteString(prog.ViewAs(m.packageProgress.progress))
-
-		// Show completion status if complete
-		if m.packageProgress.isComplete {
-			s.WriteString(" ✓")
-		}
-
-		s.WriteString("\n")
-	}
+	s.WriteString("\n")
 
 	// Installation logs if any
 	if len(m.logMessages) > 0 {
-		s.WriteString("\n")
 		s.WriteString(m.styles.Bold.Render("Installation logs:"))
 		s.WriteString("\n")
 
@@ -110,6 +131,15 @@ func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case packageInstallProgressMsg:
 		// Update package progress in the model
 		m.packageProgress = msg
+
+		// Log significant progress updates
+		if msg.progress == 0 || msg.progress >= 0.25 && msg.progress < 0.26 ||
+			msg.progress >= 0.5 && msg.progress < 0.51 || msg.progress >= 0.75 && msg.progress < 0.76 ||
+			msg.progress == 1.0 || msg.isComplete {
+			m.logMessages = append(m.logMessages,
+				"Package installation progress: "+fmt.Sprintf("%.1f%%", msg.progress*100)+
+					" - Step: "+msg.step)
+		}
 
 		// If installation is complete, let the process continue
 		if msg.isComplete {

@@ -101,17 +101,29 @@ func (self Model) installRequiredPackages() tea.Cmd {
 			return errMsg{err}
 		}
 
+		// Start time for installation
+		startTime := time.Now()
+
 		// Progress reporting function
 		progressFunc := func(packageName string, progress float64, step string, isComplete bool) {
 			// Only send if the channel is available and not full
 			if self.packageProgressChan != nil {
-				select {
-				case self.packageProgressChan <- packageInstallProgressMsg{
+				// Create message with timing information
+				msg := packageInstallProgressMsg{
 					packageName: packageName,
 					progress:    progress,
 					step:        step,
 					isComplete:  isComplete,
-				}:
+					startTime:   startTime,
+				}
+
+				// Set end time if complete
+				if isComplete {
+					msg.endTime = time.Now()
+				}
+
+				select {
+				case self.packageProgressChan <- msg:
 					// Message sent successfully
 				default:
 					// Channel is full, log rather than block
