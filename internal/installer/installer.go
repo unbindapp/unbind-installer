@@ -3,6 +3,7 @@ package installer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"helm.sh/helm/v3/pkg/cli"
@@ -144,7 +145,7 @@ type DependencyInstallCompleteMsg struct{}
 
 // Last time we sent a progress update for each dependency
 var lastProgressUpdateTimes = make(map[string]time.Time)
-var minProgressInterval = 100 * time.Millisecond // Reduced interval for smoother updates
+var minProgressInterval = 50 * time.Millisecond // Reduced interval for smoother updates
 
 // logProgress handles all state/progress tracking
 func (self *UnbindInstaller) logProgress(name string, progress float64, description string, err error, status InstallerStatus) {
@@ -174,13 +175,15 @@ func (self *UnbindInstaller) logProgress(name string, progress float64, descript
 	state.description = description
 	state.error = err
 
-	// Add to step history if it's a new step
+	// Always add to step history if it's a new step
 	if description != "" && (len(state.stepHistory) == 0 || state.stepHistory[len(state.stepHistory)-1] != description) {
 		state.stepHistory = append(state.stepHistory, description)
+		// Force an update when step history changes
+		self.sendUpdateMessage(name)
+	} else {
+		// For progress updates without description changes
+		self.sendUpdateMessage(name)
 	}
-
-	// Send update message
-	self.sendUpdateMessage(name)
 }
 
 // sendUpdateMessage pushes updates to the UI
@@ -221,15 +224,21 @@ func (self *UnbindInstaller) sendUpdateMessage(name string) {
 	// 3. There's an error
 	// 4. Description has changed (ensures all steps are shown)
 	// 5. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
-	// 6. Progress has changed significantly (>= 1%)
+	// 6. Progress has changed significantly
 	// 7. It's been at least minProgressInterval since the last update
 	shouldSendUpdate := !exists ||
 		state.status != StatusInstalling ||
 		state.error != nil ||
 		descriptionChanged ||
 		state.progress == 0.0 || state.progress == 0.25 || state.progress == 0.5 || state.progress == 0.75 || state.progress == 1.0 ||
-		(exists && state.progress >= 0.01) ||
-		now.Sub(lastUpdate) >= minProgressInterval
+		(exists && now.Sub(lastUpdate) >= 500*time.Millisecond)
+
+	// For long-running operations like Helmfile sync, use less frequent updates
+	if state.description != "" &&
+		(strings.Contains(state.description, "Running helmfile sync") ||
+		 strings.Contains(state.description, "Installing Unbind components")) {
+		shouldSendUpdate = !exists || now.Sub(lastUpdate) >= 2*time.Second
+	}
 
 	if shouldSendUpdate {
 		lastProgressUpdateTimes[name] = now

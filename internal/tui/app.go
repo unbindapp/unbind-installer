@@ -80,9 +80,9 @@ func NewModel(version string) Model {
 
 	// Create buffered channels to prevent blocking
 	logChan := make(chan string, 100) // Buffer for log messages
-	progressChan := make(chan installer.UnbindInstallUpdateMsg, 20)
-	packageProgressChan := make(chan packageInstallProgressMsg, 20)
-	k3sProgressChan := make(chan k3s.K3SUpdateMessage, 20)
+	progressChan := make(chan installer.UnbindInstallUpdateMsg, 100)
+	packageProgressChan := make(chan packageInstallProgressMsg, 50)
+	k3sProgressChan := make(chan k3s.K3SUpdateMessage, 100)
 
 	// Initialize domain input
 	domainInput := initializeDomainInput()
@@ -479,6 +479,7 @@ func (self Model) listenForPackageProgress() tea.Cmd {
 		}
 	}
 }
+
 
 // sendCompletionMessage safely sends a completion message to a channel
 func (self Model) sendCompletionMessage(channel interface{}, msg interface{}) {

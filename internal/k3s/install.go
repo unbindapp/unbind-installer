@@ -61,7 +61,7 @@ func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage) *In
 
 // Last time we sent a progress update
 var lastProgressUpdateTime time.Time
-var minProgressInterval = 100 * time.Millisecond // Reduced interval for smoother updates
+var minProgressInterval = 50 * time.Millisecond // Reduced interval for smoother updates
 
 // logProgress tracks install progress
 func (self *Installer) logProgress(progress float64, status string, description string, err error) {
@@ -78,6 +78,12 @@ func (self *Installer) logProgress(progress float64, status string, description 
 			self.state.endTime = time.Now()
 		}
 		self.state.status = status
+	}
+
+	// Always update step history if it's a new description
+	if description != "" && (len(self.state.lastMsg.StepHistory) == 0 || 
+		self.state.lastMsg.StepHistory[len(self.state.lastMsg.StepHistory)-1] != description) {
+		self.state.lastMsg.StepHistory = append(self.state.lastMsg.StepHistory, description)
 	}
 
 	// We'll continue to track all updates in the local state
@@ -101,13 +107,11 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 		Error:       err,
 		StartTime:   self.state.startTime,
 		EndTime:     self.state.endTime,
-		StepHistory: self.state.lastMsg.StepHistory,
+		StepHistory: make([]string, len(self.state.lastMsg.StepHistory)),
 	}
-
-	// Add to step history if it's a new description
-	if description != "" && !contains(msg.StepHistory, description) {
-		msg.StepHistory = append(msg.StepHistory, description)
-	}
+	
+	// Make a copy of the step history to avoid mutation issues
+	copy(msg.StepHistory, self.state.lastMsg.StepHistory)
 
 	// Always update local state
 	self.state.lastMsg = msg
@@ -122,18 +126,24 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 		// 2. Status has changed (especially to completed or failed)
 		// 3. Description has changed (ensures all steps are shown)
 		// 4. It's a significant progress threshold (0%, 25%, 50%, 75%, 100%)
-		// 5. Progress has changed significantly (>= 1%)
+		// 5. Progress has changed (even small changes)
 		// 6. It's been at least minimum interval since last update
 		shouldSendUpdate := (err != nil) ||
-			(status != self.state.lastMsg.Status) ||
+			(status != "installing") || // Always send for non-installing states
 			(description != "" && description != self.state.lastMsg.Description) ||
-			(progress-self.state.lastMsg.Progress >= 0.01) ||
+			(now.Sub(lastProgressUpdateTime) >= 500*time.Millisecond) ||
 			(progress == 0.0 || progress == 0.25 || progress == 0.5 || progress == 0.75 || progress == 1.0) ||
-			now.Sub(lastProgressUpdateTime) >= minProgressInterval
+			false
 
 		if shouldSendUpdate {
 			lastProgressUpdateTime = now
-			self.UpdateChan <- msg
+			select {
+			case self.UpdateChan <- msg:
+				// Message sent successfully
+			default:
+				// Channel is full, log it but don't block
+				self.log("Warning: Progress update channel is full")
+			}
 		}
 	}
 }

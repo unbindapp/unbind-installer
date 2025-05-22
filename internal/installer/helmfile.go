@@ -158,19 +158,29 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Start progress updates during wait
 				waitDone := make(chan error, 1)
 
-				// Tick progress slowly
+				// Update progress during long-running operations
 				go func() {
 					currentProgress := 0.35
 
-					ticker := time.NewTicker(5 * time.Second)
+					// Set up a ticker for progress updates
+					ticker := time.NewTicker(2 * time.Second)
 					defer ticker.Stop()
 
 					for {
 						select {
 						case <-ticker.C:
 							if currentProgress < 0.85 {
+								// Gradually increment progress
 								currentProgress += 0.005
-								self.logProgress(dependencyName, currentProgress, self.state[dependencyName].description, nil, StatusInstalling)
+								
+								// Use current description or a default
+								description := self.state[dependencyName].description
+								if description == "" || description == "Running helmfile sync" {
+									description = "Installing Unbind components..."
+								}
+								
+								// Send progress update
+								self.logProgress(dependencyName, currentProgress, description, nil, StatusInstalling)
 							}
 						case <-waitDone:
 							return
