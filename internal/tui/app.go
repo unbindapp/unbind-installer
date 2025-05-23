@@ -131,6 +131,17 @@ func NewModel(version string) Model {
 			Status:      "pending",
 			Description: "Initializing K3S installation",
 		},
+		unbindProgress: installer.UnbindInstallUpdateMsg{
+			Name:        "unbind",
+			Status:      installer.StatusPending,
+			Progress:    0.0,
+			Description: "Initializing Unbind installation",
+		},
+		packageProgress: packageInstallProgressMsg{
+			progress:   0.0,
+			step:       "Initializing package installation",
+			isComplete: false,
+		},
 		domainInput:         domainInput,
 		registryInput:       registryInput,
 		usernameInput:       usernameInput,
@@ -148,19 +159,6 @@ func (self Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		self.spinner.Tick, // Start the spinner
 		self.listenForLogs(),
-	}
-
-	// Only add progress listeners if we have their corresponding channels
-	if self.unbindProgressChan != nil {
-		cmds = append(cmds, self.listenForUnbindProgress())
-	}
-
-	if self.k3sProgressChan != nil {
-		cmds = append(cmds, self.listenForK3SProgress())
-	}
-
-	if self.packageProgressChan != nil {
-		cmds = append(cmds, self.listenForPackageProgress())
 	}
 
 	return tea.Batch(cmds...)
@@ -431,66 +429,51 @@ func (self Model) listenForLogs() tea.Cmd {
 // listenForK3SProgress returns a command that listens for K3S progress messages
 func (self Model) listenForK3SProgress() tea.Cmd {
 	return func() tea.Msg {
-		select {
-		case msg, ok := <-self.k3sProgressChan:
-			if !ok {
-				// Channel closed, send completion message to stop this listener
-				return k3sProgressCompletedMsg{}
-			}
-			// Check if this is a completion message (progress = 1.0 and status = completed)
-			if msg.Progress >= 1.0 && msg.Status == "completed" {
-				// Send a completion signal to stop further listening
-				return k3sProgressCompletedMsg{}
-			}
-			return msg
-		default:
-			// Non-blocking check, return nil immediately
-			return nil
+		msg, ok := <-self.k3sProgressChan
+		if !ok {
+			// Channel closed, send completion message to stop this listener
+			return k3sProgressCompletedMsg{}
 		}
+		// Check if this is a completion message (progress = 1.0 and status = completed)
+		if msg.Progress >= 1.0 && msg.Status == "completed" {
+			// Send a completion signal to stop further listening
+			return k3sProgressCompletedMsg{}
+		}
+		return msg
 	}
 }
 
 // listenForPackageProgress returns a command that listens for package installation progress
 func (self Model) listenForPackageProgress() tea.Cmd {
 	return func() tea.Msg {
-		select {
-		case msg, ok := <-self.packageProgressChan:
-			if !ok {
-				// Channel closed, send completion message to stop this listener
-				return packageProgressCompletedMsg{}
-			}
-			// Check if this is a completion message (isComplete = true)
-			if msg.isComplete {
-				// Send a completion signal to stop further listening
-				return packageProgressCompletedMsg{}
-			}
-			return msg
-		default:
-			// Non-blocking check, return nil immediately
-			return nil
+		msg, ok := <-self.packageProgressChan
+		if !ok {
+			// Channel closed, send completion message to stop this listener
+			return packageProgressCompletedMsg{}
 		}
+		// Check if this is a completion message (isComplete = true)
+		if msg.isComplete {
+			// Send a completion signal to stop further listening
+			return packageProgressCompletedMsg{}
+		}
+		return msg
 	}
 }
 
 // listenForUnbindProgress returns a command that listens for unbind installation progress
 func (self Model) listenForUnbindProgress() tea.Cmd {
 	return func() tea.Msg {
-		select {
-		case msg, ok := <-self.unbindProgressChan:
-			if !ok {
-				// Channel closed, send completion message to stop this listener
-				return unbindProgressCompletedMsg{}
-			}
-			// Check if this is a completion message (progress = 1.0 and status = completed)
-			if msg.Progress >= 1.0 && msg.Status == installer.StatusCompleted {
-				// Send a completion signal to stop further listening
-				return unbindProgressCompletedMsg{}
-			}
-			return msg
-		default:
-			// Non-blocking check, return nil immediately
-			return nil
+		msg, ok := <-self.unbindProgressChan
+		if !ok {
+			// Channel closed, send completion message to stop this listener
+			return unbindProgressCompletedMsg{}
 		}
+		// Check if this is a completion message (progress = 1.0 and status = completed)
+		if msg.Progress >= 1.0 && msg.Status == installer.StatusCompleted {
+			// Send a completion signal to stop further listening
+			return unbindProgressCompletedMsg{}
+		}
+		return msg
 	}
 }
 

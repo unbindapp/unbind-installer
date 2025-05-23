@@ -180,10 +180,6 @@ fs.inotify.max_user_instances = 2099999999`
 					return fmt.Errorf("failed to download K3S installer: %w", err)
 				}
 
-				// Send progress update for the next step immediately after download completes
-				self.logProgress(0.15, "installing", "Setting execution permissions on installer script", nil)
-				time.Sleep(100 * time.Millisecond) // Short pause to ensure UI updates
-
 				return nil
 			},
 		},
@@ -199,10 +195,6 @@ fs.inotify.max_user_instances = 2099999999`
 					return fmt.Errorf("failed to set installer permissions: %w", err)
 				}
 
-				// Send progress update for the next step immediately after this step completes
-				self.logProgress(0.20, "installing", "Running K3S installer", nil)
-				time.Sleep(100 * time.Millisecond) // Short pause to ensure UI updates
-
 				return nil
 			},
 		},
@@ -214,53 +206,14 @@ fs.inotify.max_user_instances = 2099999999`
 				installCmd := exec.CommandContext(ctx, "/bin/sh", "/tmp/k3s-installer.sh")
 				installCmd.Env = append(os.Environ(), fmt.Sprintf("INSTALL_K3S_EXEC=%s", k3sInstallFlags))
 
-				installDone := make(chan error, 1)
-
-				go func() {
-					currentProgress := 0.20
-					phase := 0
-					phases := []string{
-						"Installing K3S server components...",
-						"Configuring K3S server...",
-						"Setting up K3S service...",
-						"Configuring K3S networking...",
-						"Starting K3S service...",
-						"Applying initial configuration...",
-					}
-
-					ticker := time.NewTicker(500 * time.Millisecond)
-					defer ticker.Stop()
-
-					for {
-						select {
-						case <-ticker.C:
-							if currentProgress < 0.80 {
-								currentProgress += 0.01
-
-								// Update phase description periodically
-								if currentProgress > 0.20+float64(phase+1)*0.10 && phase < len(phases)-1 {
-									phase++
-								}
-
-								self.logProgress(currentProgress, "installing", phases[phase], nil)
-							}
-						case <-installDone:
-							return
-						case <-ctx.Done():
-							return
-						}
-					}
-				}()
-
-				installOutput, _ := installCmd.CombinedOutput()
+				installOutput, err := installCmd.CombinedOutput()
 				installOutputStr := string(installOutput)
 
-				close(installDone)
-
-				// Report 80% progress after installer finishes
-				self.logProgress(0.80, "installing", "K3S server installed, configuring services...", nil)
-
 				self.log(fmt.Sprintf("Installation output: %s", installOutputStr))
+
+				if err != nil {
+					return fmt.Errorf("K3S installation failed: %w", err)
+				}
 
 				if strings.Contains(installOutputStr, "Job for k3s.service failed") {
 					self.log("Detected k3s.service failure in the installation output")
@@ -296,32 +249,6 @@ fs.inotify.max_user_instances = 2099999999`
 			Description: "Waiting for K3S service to become fully active",
 			Progress:    0.60,
 			Action: func(ctx context.Context) error {
-				waitStartTime := time.Now()
-				waitDone := make(chan error, 1)
-
-				go func() {
-					currentProgress := 0.60
-
-					ticker := time.NewTicker(5 * time.Second)
-					defer ticker.Stop()
-
-					for {
-						select {
-						case <-ticker.C:
-							if currentProgress < 0.75 {
-								currentProgress += 0.03
-								elapsed := time.Since(waitStartTime).Round(time.Second)
-								updatedDescription := fmt.Sprintf("Waiting for K3S service to start (elapsed: %v)...", elapsed)
-								self.logProgress(currentProgress, "installing", updatedDescription, nil)
-							}
-						case <-waitDone:
-							return
-						case <-ctx.Done():
-							return
-						}
-					}
-				}()
-
 				maxRetries := 6
 				for retry := 0; retry < maxRetries; retry++ {
 					time.Sleep(5 * time.Second)
@@ -331,8 +258,6 @@ fs.inotify.max_user_instances = 2099999999`
 
 					if status == "active" {
 						self.log("K3S service is now active")
-						waitDone <- nil
-						close(waitDone)
 						return nil
 					}
 
@@ -341,14 +266,10 @@ fs.inotify.max_user_instances = 2099999999`
 						self.log(errMsg)
 
 						serviceError := self.collectServiceDiagnostics()
-						waitDone <- serviceError
-						close(waitDone)
 						return fmt.Errorf("K3S service failed to become active after installation: %w", serviceError)
 					}
 				}
 
-				waitDone <- nil
-				close(waitDone)
 				return nil
 			},
 		},
@@ -550,8 +471,91 @@ fs.inotify.max_user_instances = 2099999999`
 			},
 		},
 		{
+			Description: "Installing Longhorn storage system",
+			Progress:    0.80,
+			Action: func(ctx context.Context) error {
+				// Add Longhorn Helm repo
+				self.log("Adding Longhorn Helm repository...")
+				repoCmd := exec.CommandContext(ctx, "helm", "repo", "add", "longhorn", "https://charts.longhorn.io")
+				if output, err := repoCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to add Longhorn Helm repo: %w, output: %s", err, string(output))
+				}
+
+				// Update Helm repos
+				self.log("Updating Helm repositories...")
+				updateCmd := exec.CommandContext(ctx, "helm", "repo", "update")
+				if output, err := updateCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to update Helm repos: %w, output: %s", err, string(output))
+				}
+
+				// Remove default annotation from existing StorageClasses
+				self.log("Removing default annotation from existing StorageClasses...")
+				patchCmd := exec.CommandContext(ctx, "kubectl", "patch", "storageclass", "--type=json", "-p",
+					`[{"op": "replace", "path": "/metadata/annotations/storageclass.kubernetes.io~1is-default-class", "value": "false"}]`,
+					"--selector=storageclass.kubernetes.io/is-default-class=true")
+				if output, err := patchCmd.CombinedOutput(); err != nil {
+					self.log(fmt.Sprintf("Warning: Failed to remove default annotation from StorageClasses: %s", string(output)))
+				}
+
+				// Install Longhorn
+				self.log("Installing Longhorn...")
+				installCmd := exec.CommandContext(ctx, "helm", "install", "longhorn", "longhorn/longhorn",
+					"--namespace", "longhorn-system",
+					"--create-namespace",
+					"--version", "1.8.1",
+					"--set", "defaultSettings.replicaSoftAntiAffinity=false",
+					"--set", "defaultSettings.replicaAutoBalance=disabled",
+					"--set", "defaultSettings.upgradeChecker=false",
+					"--set", "defaultSettings.autoSalvage=true",
+					"--set", "defaultSettings.disableRevisionCounter=true",
+					"--set", "defaultSettings.storageOverProvisioningPercentage=150",
+					"--set", "defaultSettings.storageMinimalAvailablePercentage=10",
+					"--set", "defaultSettings.concurrentReplicaRebuildPerNodeLimit=0",
+					"--set", "defaultSettings.concurrentVolumeBackupRestorePerNodeLimit=0",
+					"--set", "defaultSettings.concurrentAutomaticEngineUpgradePerNodeLimit=0",
+					"--set", "defaultSettings.guaranteedInstanceManagerCPU=0",
+					"--set", "defaultSettings.kubernetesClusterAutoscalerEnabled=false",
+					"--set", "defaultSettings.autoCleanupSystemGeneratedSnapshot=true",
+					"--set", "defaultSettings.disableSchedulingOnCordonedNode=true",
+					"--set", "defaultSettings.fastReplicaRebuildEnabled=false",
+					"--set", "csi.attacherReplicaCount=1",
+					"--set", "csi.provisionerReplicaCount=1",
+					"--set", "csi.resizerReplicaCount=1",
+					"--set", "csi.snapshotterReplicaCount=1",
+					"--set", "longhornUI.replicas=1",
+					"--set", "persistence.reclaimPolicy=Retain",
+					"--set", "persistence.defaultClass=true")
+
+				// Set KUBECONFIG environment variable
+				installCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
+
+				if output, err := installCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to install Longhorn: %w, output: %s", err, string(output))
+				}
+
+				// Wait for Longhorn to be ready
+				self.log("Waiting for Longhorn to be ready...")
+				waitCmd := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition=ready", "pod", "-l", "app=longhorn-manager", "-n", "longhorn-system", "--timeout=300s")
+				waitCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
+				if output, err := waitCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed waiting for Longhorn to be ready: %w, output: %s", err, string(output))
+				}
+
+				// Remove default annotation from local-path storage class
+				self.log("Removing default annotation from local-path storage class...")
+				patchCmd = exec.CommandContext(ctx, "kubectl", "patch", "storageclass", "local-path", "--type=json", "-p",
+					`[{"op": "replace", "path": "/metadata/annotations/storageclass.kubernetes.io~1is-default-class", "value": "false"}]`)
+				patchCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
+				if output, err := patchCmd.CombinedOutput(); err != nil {
+					self.log(fmt.Sprintf("Warning: Failed to remove default annotation from local-path storage class: %s", string(output)))
+				}
+
+				return nil
+			},
+		},
+		{
 			Description: "Pre-fetching common container images",
-			Progress:    0.87,
+			Progress:    0.85,
 			Action: func(ctx context.Context) error {
 				// List of common images to pre-fetch
 				images := []string{
@@ -609,91 +613,8 @@ fs.inotify.max_user_instances = 2099999999`
 			},
 		},
 		{
-			Description: "Installing Longhorn storage system",
-			Progress:    0.80,
-			Action: func(ctx context.Context) error {
-				// Add Longhorn Helm repo
-				self.log("Adding Longhorn Helm repository...")
-				repoCmd := exec.CommandContext(ctx, "helm", "repo", "add", "longhorn", "https://charts.longhorn.io")
-				if output, err := repoCmd.CombinedOutput(); err != nil {
-					return fmt.Errorf("failed to add Longhorn Helm repo: %w, output: %s", err, string(output))
-				}
-
-				// Update Helm repos
-				self.log("Updating Helm repositories...")
-				updateCmd := exec.CommandContext(ctx, "helm", "repo", "update")
-				if output, err := updateCmd.CombinedOutput(); err != nil {
-					return fmt.Errorf("failed to update Helm repos: %w, output: %s", err, string(output))
-				}
-
-				// Remove default annotation from existing StorageClasses
-				self.log("Removing default annotation from existing StorageClasses...")
-				patchCmd := exec.CommandContext(ctx, "kubectl", "patch", "storageclass", "--type=json", "-p",
-					`[{"op": "replace", "path": "/metadata/annotations/storageclass.kubernetes.io~1is-default-class", "value": "false"}]`,
-					"--selector=storageclass.kubernetes.io/is-default-class=true")
-				if output, err := patchCmd.CombinedOutput(); err != nil {
-					self.log(fmt.Sprintf("Warning: Failed to remove default annotation from StorageClasses: %s", string(output)))
-				}
-
-				// Install Longhorn
-				self.log("Installing Longhorn...")
-				installCmd := exec.CommandContext(ctx, "helm", "install", "longhorn", "longhorn/longhorn",
-					"--namespace", "longhorn-system",
-					"--create-namespace",
-					"--version", "1.8.1",
-					"--set", "defaultSettings.replicaSoftAntiAffinity=false",
-					"--set", "defaultSettings.replicaAutoBalance=disabled",
-					"--set", "defaultSettings.upgradeChecker=false",
-					"--set", "defaultSettings.autoSalvage=true",
-					"--set", "defaultSettings.disableRevisionCounter=true",
-					"--set", "defaultSettings.storageOverProvisioningPercentage=120",
-					"--set", "defaultSettings.storageMinimalAvailablePercentage=10",
-					"--set", "defaultSettings.concurrentReplicaRebuildPerNodeLimit=0",
-					"--set", "defaultSettings.concurrentVolumeBackupRestorePerNodeLimit=0",
-					"--set", "defaultSettings.concurrentAutomaticEngineUpgradePerNodeLimit=0",
-					"--set", "defaultSettings.guaranteedInstanceManagerCPU=0",
-					"--set", "defaultSettings.kubernetesClusterAutoscalerEnabled=false",
-					"--set", "defaultSettings.autoCleanupSystemGeneratedSnapshot=true",
-					"--set", "defaultSettings.disableSchedulingOnCordonedNode=true",
-					"--set", "defaultSettings.fastReplicaRebuildEnabled=false",
-					"--set", "csi.attacherReplicaCount=1",
-					"--set", "csi.provisionerReplicaCount=1",
-					"--set", "csi.resizerReplicaCount=1",
-					"--set", "csi.snapshotterReplicaCount=1",
-					"--set", "longhornUI.replicas=1",
-					"--set", "persistence.reclaimPolicy=Retain",
-					"--set", "persistence.defaultClass=true")
-
-				// Set KUBECONFIG environment variable
-				installCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
-
-				if output, err := installCmd.CombinedOutput(); err != nil {
-					return fmt.Errorf("failed to install Longhorn: %w, output: %s", err, string(output))
-				}
-
-				// Wait for Longhorn to be ready
-				self.log("Waiting for Longhorn to be ready...")
-				waitCmd := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition=ready", "pod", "-l", "app=longhorn-manager", "-n", "longhorn-system", "--timeout=300s")
-				waitCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
-				if output, err := waitCmd.CombinedOutput(); err != nil {
-					return fmt.Errorf("failed waiting for Longhorn to be ready: %w, output: %s", err, string(output))
-				}
-
-				// Remove default annotation from local-path storage class
-				self.log("Removing default annotation from local-path storage class...")
-				patchCmd = exec.CommandContext(ctx, "kubectl", "patch", "storageclass", "local-path", "--type=json", "-p",
-					`[{"op": "replace", "path": "/metadata/annotations/storageclass.kubernetes.io~1is-default-class", "value": "false"}]`)
-				patchCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
-				if output, err := patchCmd.CombinedOutput(); err != nil {
-					self.log(fmt.Sprintf("Warning: Failed to remove default annotation from local-path storage class: %s", string(output)))
-				}
-
-				return nil
-			},
-		},
-		{
 			Description: "Verifying K3S installation by checking nodes",
-			Progress:    0.85,
+			Progress:    0.95,
 			Action: func(ctx context.Context) error {
 				maxNodeRetries := 6
 				for retry := 0; retry < maxNodeRetries; retry++ {
@@ -760,7 +681,7 @@ fs.inotify.max_user_instances = 2099999999`
 	}
 
 	// Execute all installation steps
-	for i, step := range steps {
+	for _, step := range steps {
 		// Log the current step
 		self.logProgress(step.Progress, "installing", step.Description, nil)
 
@@ -772,13 +693,9 @@ fs.inotify.max_user_instances = 2099999999`
 			return "", err
 		}
 
-		// If not the last step, log progress for the next step
-		if i < len(steps)-1 {
-			nextStep := steps[i+1]
-			// Update progress to show we're moving to the next step, but don't change the description yet
-			self.logProgress((step.Progress+nextStep.Progress)/2, "installing",
-				fmt.Sprintf("Completed: %s", step.Description), nil)
-		}
+		// Log completion of current step
+		completionMsg := fmt.Sprintf("Completed: %s", step.Description)
+		self.logProgress(step.Progress, "installing", completionMsg, nil)
 	}
 
 	// Set end time and send final progress update

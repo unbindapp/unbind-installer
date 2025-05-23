@@ -100,9 +100,14 @@ func viewInstallingK3S(m Model) string {
 	s.WriteString("\n")
 
 	if len(m.k3sProgress.StepHistory) > 0 {
-		// Show all steps instead of just the last 3
-		for i, step := range m.k3sProgress.StepHistory {
-			s.WriteString(fmt.Sprintf("  %d. %s\n", i+1, m.styles.Subtle.Render(step)))
+		// Show only the last 5 steps to keep the display manageable
+		startIdx := 0
+		if len(m.k3sProgress.StepHistory) > 5 {
+			startIdx = len(m.k3sProgress.StepHistory) - 5
+		}
+
+		for i, step := range m.k3sProgress.StepHistory[startIdx:] {
+			s.WriteString(fmt.Sprintf("  %d. %s\n", startIdx+i+1, m.styles.Subtle.Render(step)))
 		}
 	} else {
 		// Show a placeholder if no steps are available yet
