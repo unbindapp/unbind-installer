@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -88,6 +87,10 @@ func viewInstallingK3S(m Model) string {
 		if m.k3sProgress.Error != nil {
 			s.WriteString(fmt.Sprintf("\n      %s", m.styles.Error.Render(m.k3sProgress.Error.Error())))
 		}
+	} else {
+		// Show pending progress bar (0%)
+		prog := m.styles.NewThemedProgress(progressBarWidth)
+		s.WriteString(prog.ViewAs(0.0))
 	}
 
 	s.WriteString("\n\n")
@@ -110,24 +113,6 @@ func viewInstallingK3S(m Model) string {
 	return s.String()
 }
 
-// updateK3SInstall updates the K3S installation state
-func (self *Model) updateK3SInstall(msg k3s.K3SUpdateMessage) {
-	self.k3sProgress.Status = msg.Status
-	self.k3sProgress.Progress = msg.Progress
-
-	// Save the description as the current step
-	if msg.Description != "" && msg.Description != self.k3sProgress.Description {
-		self.k3sProgress.Description = msg.Description
-
-		// Add to steps history
-		if !slices.Contains(self.k3sProgress.StepHistory, msg.Description) {
-			self.k3sProgress.StepHistory = append(self.k3sProgress.StepHistory, msg.Description)
-		}
-	}
-
-	self.k3sProgress.Error = msg.Error
-}
-
 // updateInstallingK3SState handles updates in the K3S installation state
 func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -137,7 +122,7 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.processStateUpdate(cmd)
 
 	case k3s.K3SUpdateMessage:
-		// Store the progress update in model
+		// Update the K3S progress in the model
 		m.k3sProgress = msg
 
 		// Log only significant progress updates to reduce logging overhead
@@ -150,16 +135,13 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 					" - Step: "+msg.Description)
 		}
 
-		// Update the K3S installation status
-		m.updateK3SInstall(msg)
-
 		// If installation completed successfully or failed, send the appropriate message
 		if msg.Status == "completed" {
 			return m.processStateUpdate(func() tea.Msg {
 				return k3sInstallCompleteMsg{
-					kubeClient:      nil,                         // Your actual kubeClient
-					kubeConfig:      "/etc/rancher/k3s/k3s.yaml", // Your actual kubeConfig
-					unbindInstaller: nil,                         // Your actual unbindInstaller
+					kubeClient:      m.kubeClient,
+					kubeConfig:      "/etc/rancher/k3s/k3s.yaml",
+					unbindInstaller: m.unbindInstaller,
 				}
 			})
 		} else if msg.Status == "failed" {
@@ -177,9 +159,6 @@ func (m Model) updateInstallingK3SState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.kubeClient = msg.kubeClient
 		m.kubeConfig = msg.kubeConfig
 		m.unbindInstaller = msg.unbindInstaller
-
-		// Clear progress channel reference to prevent memory leaks
-		m.k3sProgressChan = nil
 
 		return m.processStateUpdate(
 			m.spinner.Tick,

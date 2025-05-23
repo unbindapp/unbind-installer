@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -38,13 +37,13 @@ func viewInstallingUnbind(m Model) string {
 
 	// Status indicator
 	switch m.unbindProgress.Status {
-	case "pending":
+	case installer.StatusPending:
 		s.WriteString("  [ ] ")
-	case "installing":
+	case installer.StatusInstalling:
 		s.WriteString("  [*] ")
-	case "completed":
+	case installer.StatusCompleted:
 		s.WriteString("  [✓] ")
-	case "failed":
+	case installer.StatusFailed:
 		s.WriteString("  [✗] ")
 	}
 
@@ -67,10 +66,10 @@ func viewInstallingUnbind(m Model) string {
 	}
 
 	// Progress bar for installing Unbind
-	if m.unbindProgress.Status == "installing" {
+	if m.unbindProgress.Status == installer.StatusInstalling {
 		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(m.unbindProgress.Progress))
-	} else if m.unbindProgress.Status == "completed" {
+	} else if m.unbindProgress.Status == installer.StatusCompleted {
 		// Show completion progress and time
 		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(1.0))
@@ -79,7 +78,7 @@ func viewInstallingUnbind(m Model) string {
 			duration := m.unbindProgress.EndTime.Sub(m.unbindProgress.StartTime).Round(time.Millisecond)
 			s.WriteString(fmt.Sprintf(" (completed in %s)", duration))
 		}
-	} else if m.unbindProgress.Status == "failed" {
+	} else if m.unbindProgress.Status == installer.StatusFailed {
 		// Show error message
 		prog := m.styles.NewThemedProgress(progressBarWidth)
 		s.WriteString(prog.ViewAs(m.unbindProgress.Progress))
@@ -88,6 +87,10 @@ func viewInstallingUnbind(m Model) string {
 		if m.unbindProgress.Error != nil {
 			s.WriteString(fmt.Sprintf("\n      %s", m.styles.Error.Render(m.unbindProgress.Error.Error())))
 		}
+	} else {
+		// Show pending progress bar (0%)
+		prog := m.styles.NewThemedProgress(progressBarWidth)
+		s.WriteString(prog.ViewAs(0.0))
 	}
 
 	s.WriteString("\n\n")
@@ -110,24 +113,6 @@ func viewInstallingUnbind(m Model) string {
 	return s.String()
 }
 
-// updateUnbindInstall updates the Unbind installation state
-func (self *Model) updateUnbindInstall(msg installer.UnbindInstallUpdateMsg) {
-	self.unbindProgress.Status = msg.Status
-	self.unbindProgress.Progress = msg.Progress
-
-	// Save the description as the current step
-	if msg.Description != "" && msg.Description != self.unbindProgress.Description {
-		self.unbindProgress.Description = msg.Description
-
-		// Add to steps history
-		if !slices.Contains(self.unbindProgress.StepHistory, msg.Description) {
-			self.unbindProgress.StepHistory = append(self.unbindProgress.StepHistory, msg.Description)
-		}
-	}
-
-	self.unbindProgress.Error = msg.Error
-}
-
 // updateInstallingUnbindState handles updates in the Unbind installation state
 func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -137,28 +122,25 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.processStateUpdate(cmd)
 
 	case installer.UnbindInstallUpdateMsg:
-		// Store the progress update in model
+		// Update the Unbind progress in the model
 		m.unbindProgress = msg
 
 		// Log only significant progress updates to reduce logging overhead
 		if msg.Progress == 0 || msg.Progress >= 0.25 && msg.Progress < 0.26 ||
 			msg.Progress >= 0.5 && msg.Progress < 0.51 || msg.Progress >= 0.75 && msg.Progress < 0.76 ||
-			msg.Progress == 1.0 || msg.Status == "completed" || msg.Status == "failed" {
+			msg.Progress == 1.0 || msg.Status == installer.StatusCompleted || msg.Status == installer.StatusFailed {
 			m.logMessages = append(m.logMessages,
 				"Unbind installation progress: "+fmt.Sprintf("%.1f%%", msg.Progress*100)+
 					" - Status: "+string(msg.Status)+
 					" - Step: "+msg.Description)
 		}
 
-		// Update the Unbind installation status
-		m.updateUnbindInstall(msg)
-
 		// If installation completed successfully or failed, send the appropriate message
-		if msg.Status == "completed" {
+		if msg.Status == installer.StatusCompleted {
 			return m.processStateUpdate(func() tea.Msg {
 				return unbindInstallCompleteMsg{}
 			})
-		} else if msg.Status == "failed" {
+		} else if msg.Status == installer.StatusFailed {
 			return m.processStateUpdate(func() tea.Msg {
 				return errMsg{err: msg.Error}
 			})
@@ -175,9 +157,6 @@ func (m Model) updateInstallingUnbindState(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Move to installation complete state
 		m.state = StateInstallationComplete
 		m.isLoading = false
-
-		// Clear progress channel reference to prevent memory leaks
-		m.unbindProgressChan = nil
 
 		return m, m.listenForLogs()
 
