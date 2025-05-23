@@ -60,7 +60,7 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 		// Start a goroutine to update progress during long-running steps
 		progressDone := make(chan struct{})
 		go func(startProgress, endProgress float64, stepDesc string) {
-			ticker := time.NewTicker(250 * time.Millisecond)
+			ticker := time.NewTicker(200 * time.Millisecond)
 			defer ticker.Stop()
 
 			currentProgress := startProgress
@@ -99,8 +99,17 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 			return fmt.Errorf("failed during %s: %w", step.step, err)
 		}
 
-		// Log successful completion
+		// Log successful completion and progress to intermediate point
 		self.log(fmt.Sprintf("Completed: %s", step.step))
+
+		// If not the last step, report an intermediate progress point
+		if i < len(steps)-1 {
+			nextStep := steps[i+1]
+			intermediateProgress := (step.progress + nextStep.progress) / 2
+			if progressFunc != nil {
+				progressFunc("", intermediateProgress, fmt.Sprintf("Completed: %s", step.step), false)
+			}
+		}
 	}
 
 	// Final verification step
@@ -108,9 +117,6 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 		progressFunc("", 0.9, "Verifying installation...", false)
 	}
 	self.log("Verifying installation...")
-
-	// Wait a moment to show completion progress
-	time.Sleep(500 * time.Millisecond)
 
 	// Report completion
 	if progressFunc != nil {

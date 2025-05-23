@@ -171,6 +171,7 @@ fs.inotify.max_user_instances = 2099999999`
 			Description: "Downloading K3S installation script",
 			Progress:    0.10,
 			Action: func(ctx context.Context) error {
+				self.log("Starting download of K3S installer script...")
 				downloadCmd := exec.CommandContext(ctx, "curl", "-sfL", "https://get.k3s.io", "-o", "/tmp/k3s-installer.sh")
 				downloadOutput, err := downloadCmd.CombinedOutput()
 				if err != nil {
@@ -178,6 +179,11 @@ fs.inotify.max_user_instances = 2099999999`
 					self.log(errMsg)
 					return fmt.Errorf("failed to download K3S installer: %w", err)
 				}
+
+				// Send progress update for the next step immediately after download completes
+				self.logProgress(0.15, "installing", "Setting execution permissions on installer script", nil)
+				time.Sleep(100 * time.Millisecond) // Short pause to ensure UI updates
+
 				return nil
 			},
 		},
@@ -192,6 +198,11 @@ fs.inotify.max_user_instances = 2099999999`
 					self.log(errMsg)
 					return fmt.Errorf("failed to set installer permissions: %w", err)
 				}
+
+				// Send progress update for the next step immediately after this step completes
+				self.logProgress(0.20, "installing", "Running K3S installer", nil)
+				time.Sleep(100 * time.Millisecond) // Short pause to ensure UI updates
+
 				return nil
 			},
 		},
@@ -749,7 +760,7 @@ fs.inotify.max_user_instances = 2099999999`
 	}
 
 	// Execute all installation steps
-	for _, step := range steps {
+	for i, step := range steps {
 		// Log the current step
 		self.logProgress(step.Progress, "installing", step.Description, nil)
 
@@ -759,6 +770,14 @@ fs.inotify.max_user_instances = 2099999999`
 			self.state.endTime = time.Now()
 			self.logProgress(step.Progress, "failed", fmt.Sprintf("Failed: %s", step.Description), err)
 			return "", err
+		}
+
+		// If not the last step, log progress for the next step
+		if i < len(steps)-1 {
+			nextStep := steps[i+1]
+			// Update progress to show we're moving to the next step, but don't change the description yet
+			self.logProgress((step.Progress+nextStep.Progress)/2, "installing",
+				fmt.Sprintf("Completed: %s", step.Description), nil)
 		}
 	}
 

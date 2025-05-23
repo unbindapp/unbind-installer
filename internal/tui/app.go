@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -424,7 +423,6 @@ func (self Model) listenForLogs() tea.Cmd {
 			return logMsg{message: msg}
 		default:
 			// Don't block if no message is available
-			time.Sleep(10 * time.Millisecond)
 			return nil
 		}
 	}
@@ -441,15 +439,12 @@ func (self Model) listenForK3SProgress() tea.Cmd {
 			}
 			// Check if this is a completion message (progress = 1.0 and status = completed)
 			if msg.Progress >= 1.0 && msg.Status == "completed" {
-				// Send one more update after a short delay to ensure UI shows completion
-				go func() {
-					time.Sleep(500 * time.Millisecond)
-					self.sendCompletionMessage(self.k3sProgressChan, msg)
-				}()
+				// Send a completion signal to stop further listening
+				return k3sProgressCompletedMsg{}
 			}
 			return msg
-		case <-time.After(100 * time.Millisecond):
-			// Use timeout instead of default to reduce CPU usage
+		default:
+			// Non-blocking check, return nil immediately
 			return nil
 		}
 	}
@@ -466,47 +461,13 @@ func (self Model) listenForPackageProgress() tea.Cmd {
 			}
 			// Check if this is a completion message (isComplete = true)
 			if msg.isComplete {
-				// Send one more update after a short delay to ensure UI shows completion
-				go func() {
-					time.Sleep(500 * time.Millisecond)
-					self.sendCompletionMessage(self.packageProgressChan, msg)
-				}()
+				// Send a completion signal to stop further listening
+				return packageProgressCompletedMsg{}
 			}
 			return msg
-		case <-time.After(100 * time.Millisecond):
-			// Use timeout instead of default to reduce CPU usage
+		default:
+			// Non-blocking check, return nil immediately
 			return nil
-		}
-	}
-}
-
-// sendCompletionMessage safely sends a completion message to a channel
-func (self Model) sendCompletionMessage(channel interface{}, msg interface{}) {
-	// Type switch to handle different channel types
-	switch ch := channel.(type) {
-	case chan<- packageInstallProgressMsg:
-		if m, ok := msg.(packageInstallProgressMsg); ok && ch != nil {
-			select {
-			case ch <- m:
-			default:
-				// Channel might be full or closed, ignore
-			}
-		}
-	case chan<- k3s.K3SUpdateMessage:
-		if m, ok := msg.(k3s.K3SUpdateMessage); ok && ch != nil {
-			select {
-			case ch <- m:
-			default:
-				// Channel might be full or closed, ignore
-			}
-		}
-	case chan<- installer.UnbindInstallUpdateMsg:
-		if m, ok := msg.(installer.UnbindInstallUpdateMsg); ok && ch != nil {
-			select {
-			case ch <- m:
-			default:
-				// Channel might be full or closed, ignore
-			}
 		}
 	}
 }
@@ -522,15 +483,12 @@ func (self Model) listenForUnbindProgress() tea.Cmd {
 			}
 			// Check if this is a completion message (progress = 1.0 and status = completed)
 			if msg.Progress >= 1.0 && msg.Status == installer.StatusCompleted {
-				// Send one more update after a short delay to ensure UI shows completion
-				go func() {
-					time.Sleep(500 * time.Millisecond)
-					self.sendCompletionMessage(self.unbindProgressChan, msg)
-				}()
+				// Send a completion signal to stop further listening
+				return unbindProgressCompletedMsg{}
 			}
 			return msg
-		case <-time.After(100 * time.Millisecond):
-			// Use timeout instead of default to reduce CPU usage
+		default:
+			// Non-blocking check, return nil immediately
 			return nil
 		}
 	}
@@ -570,33 +528,6 @@ func (self Model) processStateUpdate(cmd tea.Cmd, additionalCmds ...tea.Cmd) (te
 		if listeners.unbindInstallListener && self.unbindProgressChan != nil {
 			allCmds = append(allCmds, self.listenForUnbindProgress())
 		}
-	}
-
-	// Handle state transition completion messages
-	switch self.state {
-	case StateInstallComplete:
-		// Send package installation completion
-		self.sendCompletionMessage(self.packageProgressChan, packageInstallProgressMsg{
-			isComplete: true,
-			progress:   1.0,
-			step:       "Installation complete",
-		})
-
-	case StateInstallingUnbind:
-		// K3S installation completed when we reach Unbind install
-		self.sendCompletionMessage(self.k3sProgressChan, k3s.K3SUpdateMessage{
-			Progress:    1.0,
-			Status:      "completed",
-			Description: "K3S installation completed",
-		})
-
-	case StateInstallationComplete:
-		// Unbind installation completed
-		self.sendCompletionMessage(self.unbindProgressChan, installer.UnbindInstallUpdateMsg{
-			Progress:    1.0,
-			Status:      installer.StatusCompleted,
-			Description: "Installation complete",
-		})
 	}
 
 	// Add any additional commands

@@ -61,7 +61,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 			Description: "Cloning repository",
 			Progress:    0.20,
 			Action: func(ctx context.Context) error {
-				self.logProgress(dependencyName, 0.21, fmt.Sprintf("Cloning from %s", opts.RepoURL), nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.20, fmt.Sprintf("Preparing to clone from %s", opts.RepoURL), nil, StatusInstalling)
 
 				// First check if git is installed
 				checkCmd := exec.CommandContext(ctx, "git", "--version")
@@ -69,10 +69,13 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					return fmt.Errorf("git command not found, please install git: %w", err)
 				}
 
+				// Send explicit progress update that we're starting the clone
+				self.logProgress(dependencyName, 0.21, "Initializing git clone...", nil, StatusInstalling)
+
 				// Set up progress updates during clone
 				cloneDone := make(chan struct{})
 				go func() {
-					ticker := time.NewTicker(200 * time.Millisecond)
+					ticker := time.NewTicker(150 * time.Millisecond) // Faster updates
 					defer ticker.Stop()
 
 					currentProgress := 0.21
@@ -89,10 +92,12 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 						select {
 						case <-ticker.C:
 							if currentProgress < 0.28 {
-								currentProgress += 0.01
+								// Increase progress increment for faster movement
+								currentProgress += 0.015
 
-								// Rotate through different messages
-								if currentProgress > 0.21 && msgIndex < len(messages)-1 && currentProgress > 0.21+float64(msgIndex)*0.014 {
+								// Rotate through different messages more frequently
+								if currentProgress > 0.21 && msgIndex < len(messages)-1 &&
+									currentProgress > 0.21+float64(msgIndex)*0.01 {
 									msgIndex++
 								}
 
@@ -106,7 +111,11 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					}
 				}()
 
-				cmd := exec.CommandContext(ctx, "git", "clone", opts.RepoURL, repoDir)
+				// Use timeout to prevent hanging on slow connections
+				cloneCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+				defer cancel()
+
+				cmd := exec.CommandContext(cloneCtx, "git", "clone", "--depth=1", opts.RepoURL, repoDir)
 
 				// Stream the output
 				stdoutPipe, err := cmd.StdoutPipe()
@@ -121,6 +130,9 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					return fmt.Errorf("failed to create git stderr pipe: %w", err)
 				}
 
+				// Add progress update before starting the command
+				self.logProgress(dependencyName, 0.22, "Starting git clone operation...", nil, StatusInstalling)
+
 				if err := cmd.Start(); err != nil {
 					close(cloneDone)
 					return fmt.Errorf("failed to start git clone: %w", err)
@@ -130,7 +142,15 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				go func() {
 					scanner := bufio.NewScanner(stdoutPipe)
 					for scanner.Scan() {
-						self.sendLog("git: " + scanner.Text())
+						line := scanner.Text()
+						self.sendLog("git: " + line)
+
+						// Use output to trigger progress updates
+						if strings.Contains(line, "Receiving objects") {
+							self.logProgress(dependencyName, 0.23, "Receiving objects from repository...", nil, StatusInstalling)
+						} else if strings.Contains(line, "Resolving deltas") {
+							self.logProgress(dependencyName, 0.25, "Resolving deltas...", nil, StatusInstalling)
+						}
 					}
 				}()
 
@@ -138,7 +158,15 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				go func() {
 					scanner := bufio.NewScanner(stderrPipe)
 					for scanner.Scan() {
-						self.sendLog("git: " + scanner.Text())
+						line := scanner.Text()
+						self.sendLog("git: " + line)
+
+						// Use output to trigger progress updates
+						if strings.Contains(line, "Cloning into") {
+							self.logProgress(dependencyName, 0.22, "Initializing repository...", nil, StatusInstalling)
+						} else if strings.Contains(line, "remote:") {
+							self.logProgress(dependencyName, 0.24, "Connected to remote repository...", nil, StatusInstalling)
+						}
 					}
 				}()
 
@@ -149,7 +177,12 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					return fmt.Errorf("failed to clone repository: %w", err)
 				}
 
-				self.logProgress(dependencyName, 0.29, fmt.Sprintf("Repository cloned successfully to %s", repoDir), nil, StatusInstalling)
+				// Signal cloning is complete with another explicit update
+				self.logProgress(dependencyName, 0.28, "Repository cloned successfully", nil, StatusInstalling)
+
+				// Signal moving to next step
+				self.logProgress(dependencyName, 0.29, fmt.Sprintf("Preparing to run helmfile in %s", repoDir), nil, StatusInstalling)
+
 				return nil
 			},
 		},
@@ -198,7 +231,11 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Add final "sync" command
 				args = append(args, "sync")
 
-				self.logProgress(dependencyName, 0.31, fmt.Sprintf("Starting installation with helmfile sync"), nil, StatusInstalling)
+				// Immediately report that we're starting the helmfile sync
+				self.logProgress(dependencyName, 0.30, "Preparing helmfile command...", nil, StatusInstalling)
+
+				// Show progress as we prepare to run the command
+				self.logProgress(dependencyName, 0.31, "Starting helmfile sync operation...", nil, StatusInstalling)
 
 				// Set up the command to run helmfile sync
 				cmd := exec.CommandContext(ctx, "helmfile", args...)
@@ -232,7 +269,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					stageIndex := 0
 
 					// Set up a ticker for progress updates
-					ticker := time.NewTicker(1 * time.Second)
+					ticker := time.NewTicker(800 * time.Millisecond) // Slightly slower to allow more visible stages
 					defer ticker.Stop()
 
 					for {
@@ -245,13 +282,6 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 
 								// Advance to next stage after a delay
 								stageIndex++
-
-								// Set a longer delay for later stages to space them out
-								if stageIndex > len(stages)/2 {
-									time.Sleep(5 * time.Second)
-								} else {
-									time.Sleep(3 * time.Second)
-								}
 							}
 						case <-waitDone:
 							return
