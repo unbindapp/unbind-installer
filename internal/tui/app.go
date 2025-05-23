@@ -283,6 +283,24 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Preserve the debug logs flag
 	newModel.showDebugLogs = self.showDebugLogs
+
+	// Ensure progress listeners are always active for installation states
+	// This fixes race conditions where listeners might not start properly
+	switch newModel.state {
+	case StateInstallingPackages:
+		if newModel.packageProgressChan != nil {
+			cmd = tea.Batch(cmd, newModel.listenForPackageProgress())
+		}
+	case StateInstallingK3S:
+		if newModel.k3sProgressChan != nil {
+			cmd = tea.Batch(cmd, newModel.listenForK3SProgress())
+		}
+	case StateInstallingUnbind:
+		if newModel.unbindProgressChan != nil {
+			cmd = tea.Batch(cmd, newModel.listenForUnbindProgress())
+		}
+	}
+
 	return newModel, cmd
 }
 
