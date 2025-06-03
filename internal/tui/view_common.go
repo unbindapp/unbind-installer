@@ -148,7 +148,7 @@ func createStyledBox(content string, style lipgloss.Style, maxWidth int) string 
 func viewLoading(m Model) string {
 	s := strings.Builder{}
 	// Banner
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 	s.WriteString(m.spinner.View())
 	s.WriteString(" ")
@@ -199,7 +199,7 @@ func (m Model) updateLoadingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 func viewError(m Model) string {
 	s := strings.Builder{}
 	// Banner
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)
@@ -298,7 +298,7 @@ func viewOSInfo(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	// OS Pretty Name (if available)

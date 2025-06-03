@@ -35,7 +35,7 @@ This document describes the layout system implemented to prevent text overflow a
 
 **All views now implement:**
 
-- ✅ `getResponsiveBanner(m.width)` instead of `getBanner()`
+- ✅ `getResponsiveBanner(m)` instead of `getBanner()`
 - ✅ `maxWidth := getUsableWidth(m.width)` for width calculations
 - ✅ `wrapText()` for long text content
 - ✅ `createStyledBox()` for input fields and bordered content
@@ -99,7 +99,7 @@ func viewExample(m Model) string {
     s := strings.Builder{}
 
     // Responsive banner
-    s.WriteString(getResponsiveBanner(m.width))
+    s.WriteString(getResponsiveBanner(m))
     s.WriteString("\n\n")
 
     // Calculate usable width

@@ -16,6 +16,9 @@ import (
 
 // Model represents the application state
 type Model struct {
+	// App version
+	version string
+
 	// State management
 	state         ApplicationState
 	showDebugLogs bool // New flag to indicate debug logs view
@@ -117,6 +120,7 @@ func NewModel(version string) Model {
 	}
 
 	return Model{
+		version:            version,
 		state:              StateWelcome,
 		showDebugLogs:      false, // Initialize debug logs flag
 		spinner:            s,

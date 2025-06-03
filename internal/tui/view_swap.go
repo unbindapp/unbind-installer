@@ -15,7 +15,7 @@ import (
 // viewCheckingSwap shows progress while checking swap status.
 func viewCheckingSwap(m Model) string {
 	s := strings.Builder{}
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	if m.isLoading {
@@ -31,7 +31,7 @@ func viewCheckingSwap(m Model) string {
 // viewConfirmCreateSwap asks the user if they want to create swap.
 func viewConfirmCreateSwap(m Model) string {
 	s := strings.Builder{}
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)
@@ -109,7 +109,7 @@ func viewConfirmCreateSwap(m Model) string {
 // viewEnterSwapSize prompts the user for the swap size.
 func viewEnterSwapSize(m Model) string {
 	s := strings.Builder{}
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)
@@ -179,7 +179,7 @@ func viewEnterSwapSize(m Model) string {
 // viewCreatingSwap shows progress while the swap file is being created.
 func viewCreatingSwap(m Model) string {
 	s := strings.Builder{}
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)
@@ -218,7 +218,7 @@ func viewCreatingSwap(m Model) string {
 // viewSwapCreated shows a success message after swap creation.
 func viewSwapCreated(m Model) string {
 	s := strings.Builder{}
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)

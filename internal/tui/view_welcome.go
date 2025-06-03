@@ -11,7 +11,7 @@ func viewWelcome(m Model) string {
 	s := strings.Builder{}
 
 	// Show the banner
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)

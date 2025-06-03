@@ -14,7 +14,7 @@ func viewDNSValidation(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)
@@ -156,7 +156,7 @@ func viewDNSSuccess(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)
@@ -323,7 +323,7 @@ func viewDNSFailed(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getBanner(m))
 	s.WriteString("\n\n")
 
 	// Error message

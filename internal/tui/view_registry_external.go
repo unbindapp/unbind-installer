@@ -17,7 +17,7 @@ func viewRegistryTypeSelection(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)
@@ -132,7 +132,7 @@ func viewExternalRegistryInput(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getResponsiveBanner(m.width))
+	s.WriteString(getResponsiveBanner(m))
 	s.WriteString("\n\n")
 
 	maxWidth := getUsableWidth(m.width)
@@ -436,7 +436,7 @@ func viewExternalRegistryValidation(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getBanner(m))
 	s.WriteString("\n\n")
 
 	// Show current action
