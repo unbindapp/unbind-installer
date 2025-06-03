@@ -72,12 +72,12 @@ func viewInstallingK3S(m Model) string {
 	}
 
 	// Progress bar width calculation - responsive to terminal size
-	progressBarWidth := maxWidth - 10 // Leave margins
-	if progressBarWidth < 20 {
-		progressBarWidth = 20
+	progressBarWidth := maxWidth - 4 // Minimal margins for progress bar
+	if progressBarWidth < 30 {
+		progressBarWidth = 30 // Reasonable minimum
 	}
-	if progressBarWidth > 60 {
-		progressBarWidth = 60 // Cap at reasonable maximum
+	if progressBarWidth > 80 {
+		progressBarWidth = 80 // Reasonable maximum for readability
 	}
 
 	// Progress bar for installing K3S
