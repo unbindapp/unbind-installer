@@ -96,8 +96,8 @@ func ensureMaxWidth(content string, maxWidth int) string {
 
 // getUsableWidth returns the usable width for content, accounting for borders and padding
 func getUsableWidth(totalWidth int) int {
-	// Account for potential borders, padding, and safe margins
-	usableWidth := totalWidth - 8 // 4 chars margin on each side
+	// Account for minimal margins - be much less conservative
+	usableWidth := totalWidth - 2 // Just 1 char margin on each side
 	if usableWidth < 40 {
 		usableWidth = 40 // Minimum usable width
 	}

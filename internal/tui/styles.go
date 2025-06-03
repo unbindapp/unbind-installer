@@ -106,10 +106,19 @@ type Styles struct {
 
 // Add a method to create a themed progress bar to the Styles struct
 func (s Styles) NewThemedProgress(width int) progress.Model {
-	// Create a new progress bar with themed colors
-	return progress.New(
+	// Create a new progress bar with themed colors and percentage display
+	prog := progress.New(
 		progress.WithDefaultGradient(), // Use the default gradient for the filled part
 		progress.WithWidth(width),      // Set the width
 		progress.WithGradient(DefaultTheme().Secondary, DefaultTheme().Accent),
 	)
+
+	// Ensure percentages are shown and properly styled
+	prog.ShowPercentage = true
+	prog.PercentFormat = "%.0f%%" // Show as integer percentage like "45%"
+	prog.PercentageStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(DefaultTheme().Text)).
+		Bold(true)
+
+	return prog
 }

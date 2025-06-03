@@ -71,13 +71,10 @@ func viewInstallingUnbind(m Model) string {
 		s.WriteString("\n      ")
 	}
 
-	// Progress bar width calculation - responsive to terminal size
-	progressBarWidth := maxWidth - 4 // Minimal margins for progress bar
-	if progressBarWidth < 30 {
-		progressBarWidth = 30 // Reasonable minimum
-	}
-	if progressBarWidth > 80 {
-		progressBarWidth = 80 // Reasonable maximum for readability
+	// Progress bar width calculation - use most of the available width
+	progressBarWidth := maxWidth - 2 // Just leave minimal margins
+	if progressBarWidth < 40 {
+		progressBarWidth = 40 // Ensure reasonable minimum
 	}
 
 	// Progress bar for installing Unbind
