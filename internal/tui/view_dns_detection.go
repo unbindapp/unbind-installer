@@ -1,9 +1,8 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
-	
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -13,8 +12,10 @@ func viewDetectingIPs(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Show current action
 	s.WriteString(m.spinner.View())
@@ -41,19 +42,17 @@ func viewDetectingIPs(m Model) string {
 		}
 
 		for _, msg := range m.logMessages[startIdx:] {
-			// Truncate the message if it's too long
-			const maxLength = 80 // Reasonable terminal width
-
-			displayMsg := msg
-			if len(msg) > maxLength {
-				displayMsg = msg[:maxLength-3] + "..."
+			// Use text wrapping instead of simple truncation
+			msgLines := wrapText(msg, maxWidth-1)
+			for _, line := range msgLines {
+				s.WriteString(" ")
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n")
 			}
-
-			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
 		}
 	}
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateDetectingIPsState handles updates in the detecting IPs state

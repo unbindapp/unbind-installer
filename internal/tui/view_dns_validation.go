@@ -14,8 +14,10 @@ func viewDNSValidation(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Show current action
 	s.WriteString(m.spinner.View())
@@ -28,20 +30,55 @@ func viewDNSValidation(m Model) string {
 	s.WriteString("\n")
 
 	if m.dnsInfo.IsWildcard {
-		s.WriteString(fmt.Sprintf("  • Wildcard: %s\n", m.styles.Normal.Render(m.dnsInfo.Domain)))
+		testLine := fmt.Sprintf("• Wildcard: %s", m.dnsInfo.Domain)
+		for _, line := range wrapText(testLine, maxWidth-2) {
+			s.WriteString("  ")
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
 	} else {
-		s.WriteString(fmt.Sprintf("  • Domain: %s\n", m.styles.Normal.Render(m.dnsInfo.Domain)))
+		testLine := fmt.Sprintf("• Domain: %s", m.dnsInfo.Domain)
+		for _, line := range wrapText(testLine, maxWidth-2) {
+			s.WriteString("  ")
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
 	}
 
-	s.WriteString(fmt.Sprintf("  • Unbind: %s\n", m.styles.Normal.Render(m.dnsInfo.UnbindDomain)))
-	s.WriteString(fmt.Sprintf("  • Registry: %s\n", m.styles.Normal.Render(m.dnsInfo.RegistryDomain)))
-	s.WriteString(fmt.Sprintf("  • Expected IP: %s\n", m.styles.Key.Render(m.dnsInfo.ExternalIP)))
+	unbindLine := fmt.Sprintf("• Unbind: %s", m.dnsInfo.UnbindDomain)
+	for _, line := range wrapText(unbindLine, maxWidth-2) {
+		s.WriteString("  ")
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+
+	registryLine := fmt.Sprintf("• Registry: %s", m.dnsInfo.RegistryDomain)
+	for _, line := range wrapText(registryLine, maxWidth-2) {
+		s.WriteString("  ")
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+
+	ipLine := fmt.Sprintf("• Expected IP: %s", m.dnsInfo.ExternalIP)
+	for _, line := range wrapText(ipLine, maxWidth-2) {
+		s.WriteString("  ")
+		s.WriteString(m.styles.Key.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
 
-	s.WriteString(m.styles.Subtle.Render("DNS changes can take up to 24-48 hours to propagate worldwide,"))
+	dnsNote1 := "DNS changes can take up to 24-48 hours to propagate worldwide,"
+	for _, line := range wrapText(dnsNote1, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
+
+	dnsNote2 := "though they often take effect within minutes."
+	for _, line := range wrapText(dnsNote2, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("though they often take effect within minutes."))
-	s.WriteString("\n\n")
 
 	// Process logs
 	if len(m.logMessages) > 0 {
@@ -55,15 +92,13 @@ func viewDNSValidation(m Model) string {
 		}
 
 		for _, msg := range m.logMessages[startIdx:] {
-			// Truncate the message if it's too long
-			const maxLength = 80 // Reasonable terminal width
-
-			displayMsg := msg
-			if len(msg) > maxLength {
-				displayMsg = msg[:maxLength-3] + "..."
+			// Use text wrapping instead of simple truncation
+			msgLines := wrapText(msg, maxWidth-1)
+			for _, line := range msgLines {
+				s.WriteString(" ")
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n")
 			}
-
-			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
 		}
 	}
 
@@ -71,7 +106,7 @@ func viewDNSValidation(m Model) string {
 	s.WriteString("\n")
 	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateDNSValidationState handles updates in the DNS validation state
@@ -121,8 +156,10 @@ func viewDNSSuccess(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Success message
 	s.WriteString(m.styles.Success.Render("✓ Configuration Successful!"))
@@ -133,25 +170,44 @@ func viewDNSSuccess(m Model) string {
 	s.WriteString("\n")
 
 	if m.dnsInfo.CloudflareDetected {
-		s.WriteString(m.styles.Normal.Render("• Cloudflare detected: "))
-		s.WriteString(m.styles.Success.Render("Yes"))
-		s.WriteString("\n")
+		cfLine := "• Cloudflare detected: Yes"
+		for _, line := range wrapText(cfLine, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
+
+		var configText string
 		if m.dnsInfo.IsWildcard {
-			s.WriteString(m.styles.Normal.Render("• Wildcard domain configured correctly with Cloudflare"))
+			configText = "• Wildcard domain configured correctly with Cloudflare"
 		} else {
-			s.WriteString(m.styles.Normal.Render("• Domains configured correctly with Cloudflare"))
+			configText = "• Domains configured correctly with Cloudflare"
+		}
+
+		for _, line := range wrapText(configText, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
 		}
 	} else {
 		s.WriteString(m.styles.Bold.Render("Configured domains:"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("• " + m.dnsInfo.UnbindDomain))
-		s.WriteString("\n")
-		if m.dnsInfo.IsWildcard {
-			s.WriteString(m.styles.Normal.Render("• " + m.dnsInfo.Domain + " (wildcard)"))
+
+		unbindLine := "• " + m.dnsInfo.UnbindDomain
+		for _, line := range wrapText(unbindLine, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
 			s.WriteString("\n")
 		}
+
+		if m.dnsInfo.IsWildcard {
+			wildcardLine := "• " + m.dnsInfo.Domain + " (wildcard)"
+			for _, line := range wrapText(wildcardLine, maxWidth) {
+				s.WriteString(m.styles.Normal.Render(line))
+				s.WriteString("\n")
+			}
+		}
+
 		s.WriteString(m.styles.Bold.Render("Points to: "))
 		s.WriteString(m.styles.Normal.Render(m.dnsInfo.ExternalIP))
+		s.WriteString("\n")
 	}
 
 	// Registry Configuration details
@@ -160,35 +216,76 @@ func viewDNSSuccess(m Model) string {
 	s.WriteString("\n")
 
 	if m.dnsInfo.RegistryType == RegistrySelfHosted {
-		s.WriteString(m.styles.Normal.Render("• Self-hosted registry configured at:"))
-		s.WriteString("\n")
-		s.WriteString(m.styles.Success.Render("  " + m.dnsInfo.RegistryDomain))
-		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("• Registry will be deployed as part of Unbind installation"))
+		regText1 := "• Self-hosted registry configured at:"
+		for _, line := range wrapText(regText1, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
+
+		regText2 := "  " + m.dnsInfo.RegistryDomain
+		for _, line := range wrapText(regText2, maxWidth) {
+			s.WriteString(m.styles.Success.Render(line))
+			s.WriteString("\n")
+		}
+
+		regText3 := "• Registry will be deployed as part of Unbind installation"
+		for _, line := range wrapText(regText3, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
 	} else {
-		s.WriteString(m.styles.Normal.Render("• External registry configured:"))
-		s.WriteString("\n")
-		s.WriteString(m.styles.Success.Render(fmt.Sprintf("  %s account: %s",
+		regText1 := "• External registry configured:"
+		for _, line := range wrapText(regText1, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
+
+		regText2 := fmt.Sprintf("  %s account: %s",
 			getRegistryDisplayName(m.dnsInfo.RegistryHost),
-			m.dnsInfo.RegistryUsername)))
-		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render("• Local registry component will be disabled"))
+			m.dnsInfo.RegistryUsername)
+		for _, line := range wrapText(regText2, maxWidth) {
+			s.WriteString(m.styles.Success.Render(line))
+			s.WriteString("\n")
+		}
+
+		regText3 := "• Local registry component will be disabled"
+		for _, line := range wrapText(regText3, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
 	}
 
 	// Validation details
 	s.WriteString("\n\n")
-	s.WriteString(m.styles.Subtle.Render(fmt.Sprintf("Validation completed in %.1f seconds", m.dnsInfo.ValidationDuration.Seconds())))
-	s.WriteString("\n\n")
+	validationText := fmt.Sprintf("Validation completed in %.1f seconds", m.dnsInfo.ValidationDuration.Seconds())
+	for _, line := range wrapText(validationText, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
-	s.WriteString(m.styles.Normal.Render("Your configuration is complete and Unbind can proceed with installation."))
-	s.WriteString("\n\n")
+	completeText := "Your configuration is complete and Unbind can proceed with installation."
+	for _, line := range wrapText(completeText, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
 	// Continue button
-	continuePrompt := m.styles.HighlightButton.Render(" Press Enter to continue ")
+	continueText := " Press Enter to continue "
+	continuePrompt := m.styles.HighlightButton.Render(continueText)
+
+	// Center the button if we have enough width
+	if maxWidth > len(continueText) {
+		padding := (maxWidth - len(continueText)) / 2
+		if padding > 0 {
+			s.WriteString(strings.Repeat(" ", padding))
+		}
+	}
 	s.WriteString(continuePrompt)
 	s.WriteString("\n\n")
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 func (m Model) updateDNSSuccessState(msg tea.Msg) (tea.Model, tea.Cmd) {

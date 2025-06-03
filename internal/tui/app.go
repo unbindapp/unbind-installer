@@ -306,70 +306,88 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View delegates to the appropriate view function based on state
 func (self Model) View() string {
+	var content string
+
 	// If debug logs are shown, show that view regardless of state
 	if self.showDebugLogs {
-		return viewDebugLogs(self)
+		content = viewDebugLogs(self)
+	} else {
+		// Otherwise show the current state's view
+		switch self.state {
+		case StateWelcome:
+			content = viewWelcome(self)
+		case StateCheckK3s:
+			content = viewCheckK3s(self)
+		case StateConfirmUninstallK3s:
+			content = viewConfirmUninstallK3s(self)
+		case StateUninstallingK3s:
+			content = viewUninstallingK3s(self)
+		case StateLoading:
+			content = viewLoading(self)
+		case StateError:
+			content = viewError(self)
+		case StateOSInfo:
+			content = viewOSInfo(self)
+		case StateCheckingSwap:
+			content = viewCheckingSwap(self)
+		case StateConfirmCreateSwap:
+			content = viewConfirmCreateSwap(self)
+		case StateEnterSwapSize:
+			content = viewEnterSwapSize(self)
+		case StateCreatingSwap:
+			content = viewCreatingSwap(self)
+		case StateSwapCreated:
+			content = viewSwapCreated(self)
+		case StateInstallingPackages:
+			content = viewInstallingPackages(self)
+		case StateInstallComplete:
+			content = viewInstallComplete(self)
+		case StateDetectingIPs:
+			content = viewDetectingIPs(self)
+		case StateDNSConfig:
+			content = viewDNSConfig(self)
+		case StateDNSValidation:
+			content = viewDNSValidation(self)
+		case StateDNSSuccess:
+			content = viewDNSSuccess(self)
+		case StateDNSFailed:
+			content = viewDNSFailed(self)
+		case StateInstallingK3S:
+			content = viewInstallingK3S(self)
+		case StateInstallingUnbind:
+			content = viewInstallingUnbind(self)
+		case StateInstallationComplete:
+			content = viewInstallationComplete(self)
+		case StateRegistryTypeSelection:
+			content = viewRegistryTypeSelection(self)
+		case StateRegistryDomainInput:
+			content = viewRegistryDomainInput(self)
+		case StateRegistryDNSValidation:
+			content = viewRegistryDNSValidation(self)
+		case StateExternalRegistryInput:
+			content = viewExternalRegistryInput(self)
+		case StateExternalRegistryValidation:
+			content = viewExternalRegistryValidation(self)
+		default:
+			content = viewWelcome(self)
+		}
 	}
 
-	// Otherwise show the current state's view
-	switch self.state {
-	case StateWelcome:
-		return viewWelcome(self)
-	case StateCheckK3s:
-		return viewCheckK3s(self)
-	case StateConfirmUninstallK3s:
-		return viewConfirmUninstallK3s(self)
-	case StateUninstallingK3s:
-		return viewUninstallingK3s(self)
-	case StateLoading:
-		return viewLoading(self)
-	case StateError:
-		return viewError(self)
-	case StateOSInfo:
-		return viewOSInfo(self)
-	case StateCheckingSwap:
-		return viewCheckingSwap(self)
-	case StateConfirmCreateSwap:
-		return viewConfirmCreateSwap(self)
-	case StateEnterSwapSize:
-		return viewEnterSwapSize(self)
-	case StateCreatingSwap:
-		return viewCreatingSwap(self)
-	case StateSwapCreated:
-		return viewSwapCreated(self)
-	case StateInstallingPackages:
-		return viewInstallingPackages(self)
-	case StateInstallComplete:
-		return viewInstallComplete(self)
-	case StateDetectingIPs:
-		return viewDetectingIPs(self)
-	case StateDNSConfig:
-		return viewDNSConfig(self)
-	case StateDNSValidation:
-		return viewDNSValidation(self)
-	case StateDNSSuccess:
-		return viewDNSSuccess(self)
-	case StateDNSFailed:
-		return viewDNSFailed(self)
-	case StateInstallingK3S:
-		return viewInstallingK3S(self)
-	case StateInstallingUnbind:
-		return viewInstallingUnbind(self)
-	case StateInstallationComplete:
-		return viewInstallationComplete(self)
-	case StateRegistryTypeSelection:
-		return viewRegistryTypeSelection(self)
-	case StateRegistryDomainInput:
-		return viewRegistryDomainInput(self)
-	case StateRegistryDNSValidation:
-		return viewRegistryDNSValidation(self)
-	case StateExternalRegistryInput:
-		return viewExternalRegistryInput(self)
-	case StateExternalRegistryValidation:
-		return viewExternalRegistryValidation(self)
-	default:
-		return viewWelcome(self)
+	// Ensure content fits within terminal bounds and handle potential overflow
+	if self.height > 0 {
+		lines := strings.Split(content, "\n")
+		maxLines := self.height - 1 // Leave space for potential command prompt
+
+		if len(lines) > maxLines {
+			// Truncate content to fit in terminal height
+			truncatedLines := lines[:maxLines-1]
+			// Add an indicator that content was truncated
+			truncatedLines = append(truncatedLines, self.styles.Subtle.Render("... (content truncated to fit terminal)"))
+			content = strings.Join(truncatedLines, "\n")
+		}
 	}
+
+	return content
 }
 
 // transition is a helper to cleanly transition between states

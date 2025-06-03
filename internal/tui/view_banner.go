@@ -10,6 +10,11 @@ import (
 
 // getBanner returns a stylized ASCII art banner for the application
 func getBanner() string {
+	return getBannerWithWidth(0) // Use default full banner
+}
+
+// getBannerWithWidth returns a banner that fits within the specified width
+func getBannerWithWidth(maxWidth int) string {
 	// ASCII art for "Unbind"
 	asciiArt := []string{
 		" _   _       _     _           _",
@@ -17,6 +22,13 @@ func getBanner() string {
 		"| | | | '_ \\| '_ \\| | '_ \\ / _` |",
 		"| |_| | | | | |_) | | | | | (_| |",
 		" \\___/|_| |_|_.__/|_|_| |_|\\__,_|",
+	}
+
+	// Check if we need a compact version
+	bannerWidth := len(asciiArt[0])
+	if maxWidth > 0 && maxWidth < bannerWidth+10 {
+		// Use compact banner for smaller terminals
+		return getCompactBanner()
 	}
 
 	// Create a bold, gradient-colored style for the banner
@@ -41,7 +53,6 @@ func getBanner() string {
 		Italic(true)
 
 	// Center the version text under the banner
-	bannerWidth := len(asciiArt[0])
 	paddingSize := (bannerWidth - len(versionText)) / 2
 	if paddingSize < 0 {
 		paddingSize = 0
@@ -54,4 +65,36 @@ func getBanner() string {
 	banner := strings.Join(styledLines, "\n") + "\n" + styledVersion
 
 	return banner
+}
+
+// getCompactBanner returns a compact version of the banner for smaller terminals
+func getCompactBanner() string {
+	compactStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#009900")).
+		Bold(true)
+
+	versionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#00cc00")).
+		Bold(true).
+		Italic(true)
+
+	title := compactStyle.Render("UNBIND")
+	version := versionStyle.Render(fmt.Sprintf("v%s", config.VERSION))
+
+	return title + " " + version
+}
+
+// getResponsiveBanner returns a banner that adapts to the terminal width
+func getResponsiveBanner(terminalWidth int) string {
+	if terminalWidth <= 0 {
+		return getBanner() // Use default if no width info
+	}
+
+	usableWidth := terminalWidth - 4 // Account for margins
+
+	if usableWidth < 35 {
+		return getCompactBanner()
+	} else {
+		return getBannerWithWidth(usableWidth)
+	}
 }

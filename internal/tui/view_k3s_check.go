@@ -6,14 +6,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func viewCheckK3s(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner()) // Assuming getBanner() is available
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
 
 	// Spinner and Action Text
@@ -27,52 +26,78 @@ func viewCheckK3s(m Model) string {
 	// Footer / Quit message
 	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 func viewConfirmUninstallK3s(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
 
+	maxWidth := getUsableWidth(m.width)
+
 	// Title using Warning or Error style
-	title := m.styles.Error.Render("! Existing K3s Installation Found!") // Using Warning style
+	title := m.styles.Error.Render("! Existing K3s Installation Found!")
 	s.WriteString(title)
 	s.WriteString("\n\n")
 
 	// Description
-	s.WriteString(m.styles.Normal.Render("An existing K3s installation (or remnants) was detected."))
+	descText1 := "An existing K3s installation (or remnants) was detected."
+	for _, line := range wrapText(descText1, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+
+	descText2 := "To ensure a clean setup for unbind, it's recommended to uninstall the existing K3s first."
+	for _, line := range wrapText(descText2, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("To ensure a clean setup for unbind, it's recommended to uninstall the existing K3s first."))
-	s.WriteString("\n\n")
 
 	// Question
-	s.WriteString(m.styles.Bold.Render("Do you want to run the K3s uninstall script?"))
-	s.WriteString("\n\n")
+	questionText := "Do you want to run the K3s uninstall script?"
+	for _, line := range wrapText(questionText, maxWidth) {
+		s.WriteString(m.styles.Bold.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
 	// Buttons
-	// Center the buttons horizontally
 	yesButton := m.styles.HighlightButton.Render(" Yes (y) ")
-	noButton := m.styles.Subtle.Render(" No (n - Quit) ") // Assuming SubtleButton exists or use Subtle
-	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, "  ", noButton)
+	noButton := m.styles.Subtle.Render(" No (n - Quit) ")
 
-	s.WriteString(buttonRow)
+	// Center buttons if we have enough width
+	buttonText := yesButton + "  " + noButton
+	if maxWidth > len(" Yes (y)   No (n - Quit) ") {
+		padding := (maxWidth - len(" Yes (y)   No (n - Quit) ")) / 2
+		if padding > 0 {
+			s.WriteString(strings.Repeat(" ", padding))
+		}
+	}
+	s.WriteString(buttonText)
 	s.WriteString("\n\n")
 
 	// Instructions / Footer
-	s.WriteString(m.styles.Subtle.Render("Press 'y' to uninstall and continue, or 'n'/'Ctrl+c' to quit."))
+	instructionText := "Press 'y' to uninstall and continue, or 'n'/'Ctrl+c' to quit."
+	for _, line := range wrapText(instructionText, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 func viewUninstallingK3s(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Spinner and Action Text
 	if m.isLoading {
@@ -83,9 +108,13 @@ func viewUninstallingK3s(m Model) string {
 	s.WriteString("\n\n")
 
 	// Footer / Quit message
-	s.WriteString(m.styles.Subtle.Render("Uninstall process started. Pressing 'Ctrl+c' will attempt to quit, but the uninstall may continue in the background."))
+	footerText := "Uninstall process started. Pressing 'Ctrl+c' will attempt to quit, but the uninstall may continue in the background."
+	for _, line := range wrapText(footerText, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 func (m Model) updateCheckK3sState(msg tea.Msg) (tea.Model, tea.Cmd) {

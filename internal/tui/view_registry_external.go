@@ -17,31 +17,51 @@ func viewRegistryTypeSelection(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Instructions
 	s.WriteString(m.styles.Bold.Render("Select Registry Type for Unbind"))
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Normal.Render("Unbind requires a container registry to store Docker images. You can:"))
-	s.WriteString("\n\n")
+	instructionText := "Unbind requires a container registry to store Docker images. You can:"
+	for _, line := range wrapText(instructionText, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
 	// Option 1: Self-hosted
 	s.WriteString(m.styles.Bold.Render("1. Self-hosted Registry"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("   Allow Unbind to install a registry on your server"))
+	option1Text := "   Allow Unbind to install a registry on your server"
+	for _, line := range wrapText(option1Text, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+	option1Note := "   - Requires DNS name pointing to your server"
+	for _, line := range wrapText(option1Note, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("   - Requires DNS name pointing to your server"))
-	s.WriteString("\n\n")
 
 	// Option 2: External registry
 	s.WriteString(m.styles.Bold.Render("2. External Registry"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("   Use Docker Hub, GHCR, Quay, or another registry service"))
+	option2Text := "   Use Docker Hub, GHCR, Quay, or another registry service"
+	for _, line := range wrapText(option2Text, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+	option2Note := "   - Requires existing account credentials"
+	for _, line := range wrapText(option2Note, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("   - Requires existing account credentials"))
-	s.WriteString("\n\n")
 
 	// Navigation hints
 	s.WriteString(m.styles.Bold.Render("Navigation:"))
@@ -62,7 +82,7 @@ func viewRegistryTypeSelection(m Model) string {
 	// Status bar at the bottom
 	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateRegistryTypeSelectionState handles selection of registry type
@@ -112,15 +132,21 @@ func viewExternalRegistryInput(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Instructions
 	s.WriteString(m.styles.Bold.Render("Enter External Registry Credentials"))
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Normal.Render("Please select a registry and enter your credentials:"))
-	s.WriteString("\n\n")
+	instructionText := "Please select a registry and enter your credentials:"
+	for _, line := range wrapText(instructionText, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
 	// Registry selection
 	s.WriteString(m.styles.Bold.Render("Select Registry:"))
@@ -160,11 +186,19 @@ func viewExternalRegistryInput(m Model) string {
 
 	// Custom registry field if selected
 	if m.selectedRegistry == 3 {
-		customRegistryInput := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#009900")).
-			Padding(0, 1).
-			Render(fmt.Sprintf("Registry Host: %s", m.registryHostInput.View()))
+		inputWidth := maxWidth - 8 // Account for border and padding
+		if inputWidth < 20 {
+			inputWidth = 20
+		}
+
+		customRegistryInput := createStyledBox(
+			fmt.Sprintf("Registry Host: %s", m.registryHostInput.View()),
+			lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#009900")).
+				Padding(0, 1),
+			inputWidth,
+		)
 
 		s.WriteString(customRegistryInput)
 		s.WriteString("\n\n")
@@ -190,54 +224,66 @@ func viewExternalRegistryInput(m Model) string {
 	s.WriteString("\n\n")
 
 	// Username input field
-	usernameInput := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#009900")).
-		Padding(0, 1).
-		Render(fmt.Sprintf("Username: %s", m.usernameInput.View()))
+	inputWidth := maxWidth - 8 // Account for border and padding
+	if inputWidth < 20 {
+		inputWidth = 20
+	}
+
+	usernameInput := createStyledBox(
+		fmt.Sprintf("Username: %s", m.usernameInput.View()),
+		lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#009900")).
+			Padding(0, 1),
+		inputWidth,
+	)
 
 	s.WriteString(usernameInput)
 	s.WriteString("\n\n")
 
 	// Password input field
-	passwordInput := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#009900")).
-		Padding(0, 1).
-		Render(fmt.Sprintf("Password: %s", m.passwordInput.View()))
+	passwordInput := createStyledBox(
+		fmt.Sprintf("Password: %s", m.passwordInput.View()),
+		lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#009900")).
+			Padding(0, 1),
+		inputWidth,
+	)
 
 	s.WriteString(passwordInput)
 	s.WriteString("\n\n")
 
-	s.WriteString(m.styles.Subtle.Render("We'll validate these credentials before proceeding"))
-	s.WriteString("\n\n")
+	validationText := "We'll validate these credentials before proceeding"
+	for _, line := range wrapText(validationText, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
 	// Navigation hints
 	s.WriteString(m.styles.Bold.Render("Navigation:"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("Tab"))
-	s.WriteString(m.styles.Normal.Render(" to switch between fields"))
+
+	navHints := []string{
+		"• Press Tab to switch between fields",
+		"• Press F1 through F4 to select registry type",
+		"• Press Enter to validate credentials",
+		"• Press Ctrl+b to go back to registry type selection",
+	}
+
+	for _, hint := range navHints {
+		for _, line := range wrapText(hint, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("F1"))
-	s.WriteString(m.styles.Normal.Render(" through "))
-	s.WriteString(m.styles.Key.Render("F4"))
-	s.WriteString(m.styles.Normal.Render(" to select registry type"))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("Enter"))
-	s.WriteString(m.styles.Normal.Render(" to validate credentials"))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("Ctrl+b"))
-	s.WriteString(m.styles.Normal.Render(" to go back to registry type selection"))
-	s.WriteString("\n\n")
 
 	// Status bar at the bottom
 	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateExternalRegistryInputState handles updates in the external registry input state

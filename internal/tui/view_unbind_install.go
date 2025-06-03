@@ -15,8 +15,10 @@ func viewInstallingUnbind(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Show current action
 	s.WriteString(m.spinner.View())
@@ -53,16 +55,29 @@ func viewInstallingUnbind(m Model) string {
 
 	// Current step description
 	if m.unbindProgress.Description != "" {
-		s.WriteString(m.styles.Subtle.Render(m.unbindProgress.Description))
-		s.WriteString("\n      ")
+		// Wrap the description text if it's too long
+		descLines := wrapText(m.unbindProgress.Description, maxWidth-6) // Account for indentation
+		for i, line := range descLines {
+			if i == 0 {
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n      ")
+			} else {
+				s.WriteString("      ")
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n      ")
+			}
+		}
 	} else {
 		s.WriteString("\n      ")
 	}
 
-	// Progress bar width calculation
-	progressBarWidth := m.width - 40
+	// Progress bar width calculation - responsive to terminal size
+	progressBarWidth := maxWidth - 10 // Leave margins
 	if progressBarWidth < 20 {
 		progressBarWidth = 20
+	}
+	if progressBarWidth > 60 {
+		progressBarWidth = 60 // Cap at reasonable maximum
 	}
 
 	// Progress bar for installing Unbind
@@ -76,7 +91,8 @@ func viewInstallingUnbind(m Model) string {
 
 		if !m.unbindProgress.StartTime.IsZero() && !m.unbindProgress.EndTime.IsZero() {
 			duration := m.unbindProgress.EndTime.Sub(m.unbindProgress.StartTime).Round(time.Millisecond)
-			s.WriteString(fmt.Sprintf(" (completed in %s)", duration))
+			timeText := fmt.Sprintf(" (completed in %s)", duration)
+			s.WriteString(timeText)
 		}
 	} else if m.unbindProgress.Status == installer.StatusFailed {
 		// Show error message
@@ -85,7 +101,12 @@ func viewInstallingUnbind(m Model) string {
 		s.WriteString(" Failed")
 
 		if m.unbindProgress.Error != nil {
-			s.WriteString(fmt.Sprintf("\n      %s", m.styles.Error.Render(m.unbindProgress.Error.Error())))
+			s.WriteString("\n      ")
+			errorLines := wrapText(m.unbindProgress.Error.Error(), maxWidth-6)
+			for _, line := range errorLines {
+				s.WriteString(m.styles.Error.Render(line))
+				s.WriteString("\n")
+			}
 		}
 	} else {
 		// Show pending progress bar (0%)
@@ -107,15 +128,31 @@ func viewInstallingUnbind(m Model) string {
 		}
 
 		for i, step := range m.unbindProgress.StepHistory[startIdx:] {
-			s.WriteString(fmt.Sprintf("  %d. %s\n", startIdx+i+1, m.styles.Subtle.Render(step)))
+			stepNum := fmt.Sprintf("  %d. ", startIdx+i+1)
+			stepLines := wrapText(step, maxWidth-len(stepNum))
+			for j, line := range stepLines {
+				if j == 0 {
+					s.WriteString(stepNum)
+					s.WriteString(m.styles.Subtle.Render(line))
+				} else {
+					s.WriteString(strings.Repeat(" ", len(stepNum)))
+					s.WriteString(m.styles.Subtle.Render(line))
+				}
+				s.WriteString("\n")
+			}
 		}
 	} else {
 		// Show a placeholder if no steps are available yet
-		s.WriteString("  Waiting for installation steps...\n")
+		waitingText := "Waiting for installation steps..."
+		for _, line := range wrapText(waitingText, maxWidth-2) {
+			s.WriteString("  ")
+			s.WriteString(line)
+			s.WriteString("\n")
+		}
 	}
 	s.WriteString("\n")
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateInstallingUnbindState handles updates in the Unbind installation state

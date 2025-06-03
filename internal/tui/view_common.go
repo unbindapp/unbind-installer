@@ -8,15 +8,151 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/unbindapp/unbind-installer/internal/errdefs"
 	"github.com/unbindapp/unbind-installer/internal/osinfo"
 )
+
+// Layout utility functions to prevent overflow
+
+// wrapText wraps text to fit within the given width
+func wrapText(text string, width int) []string {
+	if width <= 0 {
+		return []string{text}
+	}
+
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []string{""}
+	}
+
+	var lines []string
+	var currentLine strings.Builder
+
+	for _, word := range words {
+		// If adding this word would exceed the width, start a new line
+		if currentLine.Len() > 0 && currentLine.Len()+1+len(word) > width {
+			lines = append(lines, currentLine.String())
+			currentLine.Reset()
+		}
+
+		if currentLine.Len() > 0 {
+			currentLine.WriteString(" ")
+		}
+		currentLine.WriteString(word)
+	}
+
+	if currentLine.Len() > 0 {
+		lines = append(lines, currentLine.String())
+	}
+
+	return lines
+}
+
+// truncateText truncates text if it's longer than maxWidth and adds ellipsis
+func truncateText(text string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return text
+	}
+
+	if len(text) <= maxWidth {
+		return text
+	}
+
+	if maxWidth <= 3 {
+		return text[:maxWidth]
+	}
+
+	return text[:maxWidth-3] + "..."
+}
+
+// ensureMaxWidth ensures content doesn't exceed the specified width
+func ensureMaxWidth(content string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	var processedLines []string
+
+	for _, line := range lines {
+		// Check if this line contains ANSI escape sequences (styled text)
+		if strings.Contains(line, "\x1b[") {
+			// For styled text, we need to be more careful
+			// Just ensure it doesn't exceed a reasonable limit
+			if len(line) > maxWidth*2 { // Account for ANSI sequences
+				processedLines = append(processedLines, line[:maxWidth*2])
+			} else {
+				processedLines = append(processedLines, line)
+			}
+		} else {
+			// For plain text, truncate if necessary
+			processedLines = append(processedLines, truncateText(line, maxWidth))
+		}
+	}
+
+	return strings.Join(processedLines, "\n")
+}
+
+// getUsableWidth returns the usable width for content, accounting for borders and padding
+func getUsableWidth(totalWidth int) int {
+	// Account for potential borders, padding, and safe margins
+	usableWidth := totalWidth - 8 // 4 chars margin on each side
+	if usableWidth < 40 {
+		usableWidth = 40 // Minimum usable width
+	}
+	if totalWidth > 0 && usableWidth > totalWidth {
+		usableWidth = totalWidth
+	}
+	return usableWidth
+}
+
+// getUsableHeight returns the usable height for content
+func getUsableHeight(totalHeight int) int {
+	// Account for banner, status bar, and margins
+	usableHeight := totalHeight - 12 // Account for banner (~6 lines) + margins
+	if usableHeight < 10 {
+		usableHeight = 10 // Minimum usable height
+	}
+	if totalHeight > 0 && usableHeight > totalHeight {
+		usableHeight = totalHeight
+	}
+	return usableHeight
+}
+
+// renderWithLayout renders content with proper layout constraints
+func renderWithLayout(m Model, content string) string {
+	if m.width <= 0 {
+		return content // No width constraints available
+	}
+
+	maxWidth := getUsableWidth(m.width)
+	return ensureMaxWidth(content, maxWidth)
+}
+
+// createStyledBox creates a styled box with content that fits within the width
+func createStyledBox(content string, style lipgloss.Style, maxWidth int) string {
+	if maxWidth <= 0 {
+		return style.Render(content)
+	}
+
+	// Account for border and padding in the style
+	contentWidth := maxWidth - 4 // 2 chars for border, 2 for padding
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
+
+	wrappedLines := wrapText(content, contentWidth)
+	wrappedContent := strings.Join(wrappedLines, "\n")
+
+	return style.Width(maxWidth).Render(wrappedContent)
+}
 
 // viewLoading shows the loading screen
 func viewLoading(m Model) string {
 	s := strings.Builder{}
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
 	s.WriteString(m.spinner.View())
 	s.WriteString(" ")
@@ -24,7 +160,7 @@ func viewLoading(m Model) string {
 	s.WriteString("\n\n")
 	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateLoadingState handles updates in the loading state
@@ -67,27 +203,41 @@ func (m Model) updateLoadingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 func viewError(m Model) string {
 	s := strings.Builder{}
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	if errors.Is(m.err, errdefs.ErrNotLinux) {
 		s.WriteString(m.styles.Error.Render("Sorry, only Linux is supported for now!"))
 	} else if errors.Is(m.err, errdefs.ErrInvalidArchitecture) {
 		s.WriteString(m.styles.Error.Render("Sorry, this installer only supports amd64 and arm64 architectures!"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render("(this is a limitation of k3s)"))
+		limitationMsg := "(this is a limitation of k3s)"
+		for _, line := range wrapText(limitationMsg, maxWidth) {
+			s.WriteString(m.styles.Subtle.Render(line))
+			s.WriteString("\n")
+		}
 	} else if errors.Is(m.err, errdefs.ErrUnsupportedDistribution) {
 		s.WriteString(m.styles.Error.Render("Sorry, this distribution is not supported!"))
 		supportedDistros := strings.Join(osinfo.AllSupportedDistros, ", ")
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render(fmt.Sprintf("Supported distributions: %s", supportedDistros)))
+		supportedMsg := fmt.Sprintf("Supported distributions: %s", supportedDistros)
+		for _, line := range wrapText(supportedMsg, maxWidth) {
+			s.WriteString(m.styles.Subtle.Render(line))
+			s.WriteString("\n")
+		}
 	} else if errors.Is(m.err, errdefs.ErrUnsupportedVersion) {
 		s.WriteString(m.styles.Error.Render("Sorry, this version is not supported!"))
 		if m.osInfo != nil {
 			supportedVersions := osinfo.AllSupportedDistrosVersions[m.osInfo.Distribution]
 			supportedVersionsStr := strings.Join(supportedVersions, ", ")
 			s.WriteString("\n")
-			s.WriteString(m.styles.Subtle.Render(fmt.Sprintf("Supported versions: %s", supportedVersionsStr)))
+			versionMsg := fmt.Sprintf("Supported versions: %s", supportedVersionsStr)
+			for _, line := range wrapText(versionMsg, maxWidth) {
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n")
+			}
 		}
 	} else if errors.Is(m.err, errdefs.ErrDistributionDetectionFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, I couldn't detect your Linux distribution!"))
@@ -96,25 +246,45 @@ func viewError(m Model) string {
 	} else if errors.Is(m.err, errdefs.ErrK3sInstallFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, the K3s installation failed!"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'Ctrl+D'."))
+		logsMsg := "Please check the logs for more details by pressing 'Ctrl+D'."
+		for _, line := range wrapText(logsMsg, maxWidth) {
+			s.WriteString(m.styles.Subtle.Render(line))
+			s.WriteString("\n")
+		}
 	} else if errors.Is(m.err, errdefs.ErrNetworkDetectionFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, I couldn't detect your network interfaces!"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'Ctrl+D'."))
+		logsMsg := "Please check the logs for more details by pressing 'Ctrl+D'."
+		for _, line := range wrapText(logsMsg, maxWidth) {
+			s.WriteString(m.styles.Subtle.Render(line))
+			s.WriteString("\n")
+		}
 	} else if errors.Is(m.err, errdefs.ErrUnbindInstallFailed) {
 		s.WriteString(m.styles.Error.Render("Sorry, the installation of unbind failed!"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Subtle.Render("Please check the logs for more details by pressing 'Ctrl+D'."))
+		logsMsg := "Please check the logs for more details by pressing 'Ctrl+D'."
+		for _, line := range wrapText(logsMsg, maxWidth) {
+			s.WriteString(m.styles.Subtle.Render(line))
+			s.WriteString("\n")
+		}
 	} else if m.err != nil {
-		s.WriteString(m.styles.Error.Render(fmt.Sprintf("An error occurred: %v", m.err)))
+		errorMsg := fmt.Sprintf("An error occurred: %v", m.err)
+		for _, line := range wrapText(errorMsg, maxWidth) {
+			s.WriteString(m.styles.Error.Render(line))
+			s.WriteString("\n")
+		}
 	} else {
-		s.WriteString(m.styles.Error.Render(fmt.Sprintf("Unknown error: %v", m.err)))
+		errorMsg := fmt.Sprintf("Unknown error: %v", m.err)
+		for _, line := range wrapText(errorMsg, maxWidth) {
+			s.WriteString(m.styles.Error.Render(line))
+			s.WriteString("\n")
+		}
 	}
 
 	s.WriteString("\n\n")
 	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateErrorState handles updates in the error state
@@ -132,7 +302,7 @@ func viewOSInfo(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
 
 	// OS Pretty Name (if available)
@@ -166,7 +336,7 @@ func viewOSInfo(m Model) string {
 	s.WriteString(m.styles.Success.Render("✓ Your system is compatible with Unbind!"))
 	s.WriteString("\n\n")
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateOSInfoState handles updates in the OS info state

@@ -14,8 +14,10 @@ func viewInstallingPackages(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Show current action
 	s.WriteString(m.spinner.View())
@@ -49,16 +51,29 @@ func viewInstallingPackages(m Model) string {
 
 	// Current step description
 	if m.packageProgress.step != "" {
-		s.WriteString(m.styles.Subtle.Render(m.packageProgress.step))
-		s.WriteString("\n      ")
+		// Wrap the step description if it's too long
+		stepLines := wrapText(m.packageProgress.step, maxWidth-6) // Account for indentation
+		for i, line := range stepLines {
+			if i == 0 {
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n      ")
+			} else {
+				s.WriteString("      ")
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n      ")
+			}
+		}
 	} else {
 		s.WriteString("\n      ")
 	}
 
-	// Progress bar width calculation
-	progressBarWidth := m.width - 40
+	// Progress bar width calculation - responsive to terminal size
+	progressBarWidth := maxWidth - 10 // Leave margins
 	if progressBarWidth < 20 {
 		progressBarWidth = 20
+	}
+	if progressBarWidth > 60 {
+		progressBarWidth = 60 // Cap at reasonable maximum
 	}
 
 	// Progress bar for installation
@@ -69,7 +84,8 @@ func viewInstallingPackages(m Model) string {
 	if m.packageProgress.isComplete {
 		if !m.packageProgress.startTime.IsZero() && !m.packageProgress.endTime.IsZero() {
 			duration := m.packageProgress.endTime.Sub(m.packageProgress.startTime).Round(time.Millisecond)
-			s.WriteString(fmt.Sprintf(" (completed in %s)", duration))
+			timeText := fmt.Sprintf(" (completed in %s)", duration)
+			s.WriteString(timeText)
 		} else {
 			s.WriteString(" ✓")
 		}
@@ -90,7 +106,19 @@ func viewInstallingPackages(m Model) string {
 	}
 
 	for _, pkg := range packages {
-		s.WriteString(fmt.Sprintf("  %s %s\n", m.styles.Key.Render("•"), m.styles.Normal.Render(pkg)))
+		bullet := m.styles.Key.Render("•")
+		pkgLine := fmt.Sprintf("%s %s", bullet, pkg)
+		pkgLines := wrapText(pkgLine, maxWidth-2)
+		for j, line := range pkgLines {
+			if j == 0 {
+				s.WriteString("  ")
+				s.WriteString(m.styles.Normal.Render(line))
+			} else {
+				s.WriteString("    ") // Extra indent for continuation
+				s.WriteString(m.styles.Normal.Render(line))
+			}
+			s.WriteString("\n")
+		}
 	}
 	s.WriteString("\n")
 
@@ -106,19 +134,17 @@ func viewInstallingPackages(m Model) string {
 		}
 
 		for _, msg := range m.logMessages[startIdx:] {
-			// Truncate the message if it's too long
-			const maxLength = 80 // Reasonable terminal width
-
-			displayMsg := msg
-			if len(msg) > maxLength {
-				displayMsg = msg[:maxLength-3] + "..."
+			// Use text wrapping instead of simple truncation
+			msgLines := wrapText(msg, maxWidth-1)
+			for _, line := range msgLines {
+				s.WriteString(" ")
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n")
 			}
-
-			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
 		}
 	}
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 func (m Model) updateInstallingPackagesState(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -184,8 +210,10 @@ func viewInstallComplete(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Installation summary
 	s.WriteString(m.styles.Bold.Render("Installed Packages:"))
@@ -199,14 +227,26 @@ func viewInstallComplete(m Model) string {
 	}
 
 	for _, pkg := range packages {
-		s.WriteString(fmt.Sprintf("  %s %s\n", m.styles.Success.Render("✓"), m.styles.Normal.Render(pkg)))
+		checkmark := m.styles.Success.Render("✓")
+		pkgLine := fmt.Sprintf("%s %s", checkmark, pkg)
+		pkgLines := wrapText(pkgLine, maxWidth-2)
+		for j, line := range pkgLines {
+			if j == 0 {
+				s.WriteString("  ")
+				s.WriteString(m.styles.Normal.Render(line))
+			} else {
+				s.WriteString("    ") // Extra indent for continuation
+				s.WriteString(m.styles.Normal.Render(line))
+			}
+			s.WriteString("\n")
+		}
 	}
 
 	s.WriteString("\n")
 	s.WriteString(m.styles.Success.Render("✓ Finished installing pre-requisites!"))
 	s.WriteString("\n\n")
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateInstallCompleteState handles updates in the installation complete state
@@ -241,8 +281,10 @@ func viewInstallationComplete(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Success message
 	s.WriteString(m.styles.Success.Render("✓ Unbind Installation Complete!"))
@@ -252,27 +294,62 @@ func viewInstallationComplete(m Model) string {
 	if m.dnsInfo != nil {
 		s.WriteString(m.styles.Bold.Render("Visit your Unbind instance to complete setup:"))
 		s.WriteString("\n")
-		s.WriteString(m.styles.Normal.Render(fmt.Sprintf("https://%s", m.dnsInfo.UnbindDomain)))
-		s.WriteString("\n\n")
+		domainURL := fmt.Sprintf("https://%s", m.dnsInfo.UnbindDomain)
+		for _, line := range wrapText(domainURL, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
+		s.WriteString("\n")
 	}
 
 	// Management options
 	s.WriteString(m.styles.Bold.Render("Management Options:"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("A management script has been installed at /usr/local/bin/unbind-manage"))
-	s.WriteString("\n\n")
+
+	mgmtText := "A management script has been installed at /usr/local/bin/unbind-manage"
+	for _, line := range wrapText(mgmtText, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
+
 	s.WriteString(m.styles.Normal.Render("Available commands:"))
 	s.WriteString("\n")
-	s.WriteString(fmt.Sprintf("  %s %s\n", m.styles.Key.Render("•"), m.styles.Normal.Render("unbind-manage uninstall - Uninstall Unbind (WARNING: This will permanently delete all data)")))
-	s.WriteString(fmt.Sprintf("  %s %s\n", m.styles.Key.Render("•"), m.styles.Normal.Render("unbind-manage add-node - Show instructions for adding a new node")))
+
+	commands := []string{
+		"• unbind-manage uninstall - Uninstall Unbind (WARNING: This will permanently delete all data)",
+		"• unbind-manage add-node - Show instructions for adding a new node",
+	}
+
+	for _, cmd := range commands {
+		cmdLines := wrapText(cmd, maxWidth-2) // Account for indentation
+		for j, line := range cmdLines {
+			if j == 0 {
+				s.WriteString("  ")
+				s.WriteString(m.styles.Normal.Render(line))
+			} else {
+				s.WriteString("    ") // Extra indent for continuation
+				s.WriteString(m.styles.Normal.Render(line))
+			}
+			s.WriteString("\n")
+		}
+	}
 	s.WriteString("\n")
 
 	// Additional information
-	s.WriteString(m.styles.Normal.Render("Your Unbind instance is now ready to use."))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("Press 'Ctrl+c' to exit."))
+	readyText := "Your Unbind instance is now ready to use."
+	for _, line := range wrapText(readyText, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
 
-	return s.String()
+	exitText := "Press 'Ctrl+c' to exit."
+	for _, line := range wrapText(exitText, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
+
+	return renderWithLayout(m, s.String())
 }
 
 // updateInstallationCompleteState handles updates in the installation complete state

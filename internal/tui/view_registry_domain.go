@@ -15,8 +15,10 @@ func viewRegistryDomainInput(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Instructions
 	s.WriteString(m.styles.Bold.Render("Configure Registry Domain for Unbind"))
@@ -42,17 +44,34 @@ func viewRegistryDomainInput(m Model) string {
 	s.WriteString("\n\n")
 
 	// Registry Domain Configuration instructions
-	s.WriteString(m.styles.Normal.Render("Unbind needs a registry domain that points to your server."))
+	registryText1 := "Unbind needs a registry domain that points to your server."
+	for _, line := range wrapText(registryText1, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+
+	registryText2 := "This domain must resolve directly to your external IP without any proxying."
+	for _, line := range wrapText(registryText2, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("This domain must resolve directly to your external IP without any proxying."))
-	s.WriteString("\n\n")
 
 	s.WriteString(m.styles.Bold.Render("Required DNS Configuration:"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("Create an 'A' record for your registry domain → " + m.dnsInfo.ExternalIP))
+
+	dnsText := "Create an 'A' record for your registry domain → " + m.dnsInfo.ExternalIP
+	for _, line := range wrapText(dnsText, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+
+	cfText := "If using Cloudflare, make sure proxy is disabled (grey cloud) for this domain."
+	for _, line := range wrapText(cfText, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("If using Cloudflare, make sure proxy is disabled (grey cloud) for this domain."))
-	s.WriteString("\n\n")
 
 	// Registry Domain input field with suggestion
 	if m.dnsInfo.IsWildcard {
@@ -61,33 +80,51 @@ func viewRegistryDomainInput(m Model) string {
 		m.registryInput.Placeholder = "registry." + m.dnsInfo.UnbindDomain
 	}
 
-	registryInput := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#009900")).
-		Padding(0, 1).
-		Render(fmt.Sprintf("Registry Domain: %s", m.registryInput.View()))
+	inputWidth := maxWidth - 8 // Account for border and padding
+	if inputWidth < 20 {
+		inputWidth = 20
+	}
+
+	registryInput := createStyledBox(
+		fmt.Sprintf("Registry Domain: %s", m.registryInput.View()),
+		lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#009900")).
+			Padding(0, 1),
+		inputWidth,
+	)
 
 	s.WriteString(registryInput)
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("Enter your registry domain (e.g. registry.yourdomain.com)"))
-	s.WriteString("\n\n")
+
+	placeholderText := "Enter your registry domain (e.g. registry.yourdomain.com)"
+	for _, line := range wrapText(placeholderText, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
 	// Navigation hints
 	s.WriteString(m.styles.Bold.Render("Navigation:"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("Enter"))
-	s.WriteString(m.styles.Normal.Render(" to validate domain"))
+
+	navHints := []string{
+		"• Press Enter to validate domain",
+		"• Press Ctrl+b to go back to registry type selection",
+	}
+
+	for _, hint := range navHints {
+		for _, line := range wrapText(hint, maxWidth) {
+			s.WriteString(m.styles.Normal.Render(line))
+			s.WriteString("\n")
+		}
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("• Press "))
-	s.WriteString(m.styles.Key.Render("Ctrl+b"))
-	s.WriteString(m.styles.Normal.Render(" to go back to registry type selection"))
-	s.WriteString("\n\n")
 
 	// Status bar at the bottom
 	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateRegistryDomainInputState handles updates in the registry domain input state
@@ -141,8 +178,10 @@ func viewRegistryDNSValidation(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Show current action
 	s.WriteString(m.spinner.View())
@@ -153,14 +192,34 @@ func viewRegistryDNSValidation(m Model) string {
 	// Display what we're testing
 	s.WriteString(m.styles.Bold.Render("Testing:"))
 	s.WriteString("\n")
-	s.WriteString(fmt.Sprintf("  • Registry Domain: %s\n", m.styles.Normal.Render(m.dnsInfo.RegistryDomain)))
-	s.WriteString(fmt.Sprintf("  • Expected IP: %s\n", m.styles.Key.Render(m.dnsInfo.ExternalIP)))
+
+	regLine := fmt.Sprintf("• Registry Domain: %s", m.dnsInfo.RegistryDomain)
+	for _, line := range wrapText(regLine, maxWidth-2) {
+		s.WriteString("  ")
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+
+	ipLine := fmt.Sprintf("• Expected IP: %s", m.dnsInfo.ExternalIP)
+	for _, line := range wrapText(ipLine, maxWidth-2) {
+		s.WriteString("  ")
+		s.WriteString(m.styles.Key.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
 
-	s.WriteString(m.styles.Subtle.Render("DNS changes can take up to 24-48 hours to propagate worldwide,"))
+	dnsNote1 := "DNS changes can take up to 24-48 hours to propagate worldwide,"
+	for _, line := range wrapText(dnsNote1, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
+
+	dnsNote2 := "though they often take effect within minutes."
+	for _, line := range wrapText(dnsNote2, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("though they often take effect within minutes."))
-	s.WriteString("\n\n")
 
 	// Process logs
 	if len(m.logMessages) > 0 {
@@ -174,15 +233,13 @@ func viewRegistryDNSValidation(m Model) string {
 		}
 
 		for _, msg := range m.logMessages[startIdx:] {
-			// Truncate the message if it's too long
-			const maxLength = 80 // Reasonable terminal width
-
-			displayMsg := msg
-			if len(msg) > maxLength {
-				displayMsg = msg[:maxLength-3] + "..."
+			// Use text wrapping instead of simple truncation
+			msgLines := wrapText(msg, maxWidth-1)
+			for _, line := range msgLines {
+				s.WriteString(" ")
+				s.WriteString(m.styles.Subtle.Render(line))
+				s.WriteString("\n")
 			}
-
-			s.WriteString(fmt.Sprintf(" %s\n", m.styles.Subtle.Render(displayMsg)))
 		}
 	}
 
@@ -190,7 +247,7 @@ func viewRegistryDNSValidation(m Model) string {
 	s.WriteString("\n")
 	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 // updateRegistryDNSValidationState handles updates in the registry DNS validation state

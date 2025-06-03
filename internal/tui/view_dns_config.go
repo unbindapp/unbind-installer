@@ -14,8 +14,10 @@ func viewDNSConfig(m Model) string {
 	s := strings.Builder{}
 
 	// Banner
-	s.WriteString(getBanner())
+	s.WriteString(getResponsiveBanner(m.width))
 	s.WriteString("\n\n")
+
+	maxWidth := getUsableWidth(m.width)
 
 	// Instructions
 	s.WriteString(m.styles.Bold.Render("Configure DNS for Unbind"))
@@ -31,43 +33,88 @@ func viewDNSConfig(m Model) string {
 	}
 
 	// DNS Configuration instructions
-	s.WriteString(m.styles.Normal.Render("For Unbind to work properly, you need to configure DNS entries pointing to your external IP address."))
-	s.WriteString("\n\n")
+	dnsText := "For Unbind to work properly, you need to configure DNS entries pointing to your external IP address."
+	for _, line := range wrapText(dnsText, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
 	s.WriteString(m.styles.Bold.Render("Option 1 (Recommended): Create a wildcard A record"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("1. Create an 'A' record for *.yourdomain.com → " + m.dnsInfo.ExternalIP))
-	s.WriteString("\n\n")
+
+	option1Text := "1. Create an 'A' record for *.yourdomain.com → " + m.dnsInfo.ExternalIP
+	for _, line := range wrapText(option1Text, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
+
 	s.WriteString(m.styles.Bold.Render("Option 2: Create a standalone A record"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("1. Create an 'A' record for yourdomain.com → " + m.dnsInfo.ExternalIP))
+
+	option2Text1 := "1. Create an 'A' record for yourdomain.com → " + m.dnsInfo.ExternalIP
+	for _, line := range wrapText(option2Text1, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+
+	option2Text2 := "This is the domain you'll use to access Unbind."
+	for _, line := range wrapText(option2Text2, maxWidth) {
+		s.WriteString(m.styles.Normal.Render(line))
+		s.WriteString("\n")
+	}
+
+	warningText := " Note: Not using a wildcard A record will disable automatic domain generation for unbind services"
+	for _, line := range wrapText(warningText, maxWidth) {
+		s.WriteString(m.styles.Warning.Render(line))
+		s.WriteString("\n")
+	}
 	s.WriteString("\n")
-	s.WriteString(m.styles.Normal.Render("This is the domain you'll use to access Unbind."))
-	s.WriteString("\n")
-	s.WriteString(m.styles.Warning.Render(" Note: Not using a wildcard A record will disable automatic domain generation for unbind services"))
-	s.WriteString("\n\n")
 
 	// Domain input field
-	domainInput := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#009900")).
-		Padding(0, 1).
-		Render(fmt.Sprintf("Domain: %s", m.domainInput.View()))
+	inputWidth := maxWidth - 8 // Account for border and padding
+	if inputWidth < 20 {
+		inputWidth = 20
+	}
+
+	domainInput := createStyledBox(
+		fmt.Sprintf("Domain: %s", m.domainInput.View()),
+		lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#009900")).
+			Padding(0, 1),
+		inputWidth,
+	)
 
 	s.WriteString(domainInput)
 	s.WriteString("\n")
-	s.WriteString(m.styles.Subtle.Render("Enter your domain (e.g. yourdomain.com)"))
-	s.WriteString("\n\n")
+
+	placeholderText := "Enter your domain (e.g. yourdomain.com)"
+	for _, line := range wrapText(placeholderText, maxWidth) {
+		s.WriteString(m.styles.Subtle.Render(line))
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
 
 	// Continue button
-	continuePrompt := m.styles.HighlightButton.Render(" Press Enter to validate DNS ")
+	continueText := " Press Enter to validate DNS "
+	continuePrompt := m.styles.HighlightButton.Render(continueText)
+
+	// Center the button if we have enough width
+	if maxWidth > len(continueText) {
+		padding := (maxWidth - len(continueText)) / 2
+		if padding > 0 {
+			s.WriteString(strings.Repeat(" ", padding))
+		}
+	}
 	s.WriteString(continuePrompt)
 	s.WriteString("\n\n")
 
 	// Status bar at the bottom
 	s.WriteString(m.styles.StatusBar.Render("Press Ctrl+c to quit"))
 
-	return s.String()
+	return renderWithLayout(m, s.String())
 }
 
 func (m Model) updateDNSConfigState(msg tea.Msg) (tea.Model, tea.Cmd) {
