@@ -2,6 +2,13 @@ package pkgmanager
 
 // PackageMapping defines the mapping of common package names to distribution-specific package names
 var PackageMapping = map[string]map[string]string{
+	"iscsiadm": {
+		"ubuntu":   "open-iscsi",
+		"debian":   "open-iscsi",
+		"fedora":   "iscsi-initiator-utils",
+		"centos":   "iscsi-initiator-utils",
+		"opensuse": "open-iscsi",
+	},
 	"git": {
 		"ubuntu":   "git",
 		"debian":   "git",
