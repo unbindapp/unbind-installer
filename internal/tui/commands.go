@@ -83,17 +83,8 @@ func (self Model) installRequiredPackages() tea.Cmd {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel() // Ensure resources are cleaned up
 
-		// Common package names that we need
-		commonPackages := []string{
-			"curl",
-			"wget",
-			"ca-certificates",
-			"apt-transport-https",
-			"apache2-utils",
-		}
-
 		// Get distribution-specific package names
-		packages := pkgmanager.GetDistributionPackages(self.osInfo.Distribution, commonPackages)
+		packages := pkgmanager.GetDistributionPackages(self.osInfo.Distribution)
 
 		// Create a new package manager
 		installer, err := pkgmanager.NewPackageManager(self.osInfo.Distribution, self.logChan)

@@ -60,11 +60,11 @@ var PackageMapping = map[string]map[string]string{
 	},
 }
 
-// GetDistributionPackages converts a list of common package names to distribution-specific package names
-func GetDistributionPackages(distribution string, packages []string) []string {
+// GetDistributionPackages returns all available packages for the specified distribution
+func GetDistributionPackages(distribution string) []string {
 	var result []string
-	for _, pkg := range packages {
-		if distPkg, ok := PackageMapping[pkg][distribution]; ok && distPkg != "" {
+	for _, packageMap := range PackageMapping {
+		if distPkg, ok := packageMap[distribution]; ok && distPkg != "" {
 			result = append(result, distPkg)
 		}
 	}
