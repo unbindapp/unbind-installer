@@ -17,6 +17,8 @@ type UnbindInstaller struct {
 	helmEnv        *cli.EnvSettings
 	state          map[string]*dependencyState
 	kubeConfigPath string
+	// Fact rotator for educational information
+	factRotator *FactRotator
 }
 
 // dependencyState tracks status info for each component
@@ -51,14 +53,19 @@ func NewUnbindInstaller(kubeConfig string, logChan chan<- string, progressChan c
 		return nil, err
 	}
 
-	return &UnbindInstaller{
+	installer := &UnbindInstaller{
 		progressChan:   progressChan,
 		kubeConfigPath: kubeConfig,
 		kubeClient:     clientset,
 		LogChan:        logChan,
 		helmEnv:        cli.New(),
 		state:          make(map[string]*dependencyState),
-	}, nil
+	}
+
+	// Initialize fact rotator with the facts from helmfile.go
+	installer.factRotator = NewFactRotator(unbindInstallationFacts)
+
+	return installer, nil
 }
 
 // InstallDependencyWithSteps runs the installation sequence

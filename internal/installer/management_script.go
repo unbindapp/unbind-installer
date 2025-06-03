@@ -63,7 +63,7 @@ check_installation() {
 show_usage() {
     print_banner
     print_box "Unbind Management Script" "$BLUE"
-    echo -e "${BOLD}Usage:${NC} unbind-manage <command>"
+    echo -e "${BOLD}Usage:${NC} unbind <command>"
     echo ""
     echo -e "${BOLD}Commands:${NC}"
     echo -e "  ${CYAN}uninstall${NC}    - Uninstall Unbind (${RED}WARNING: This will permanently delete all data${NC})"
@@ -203,7 +203,7 @@ func InstallManagementScript(clusterIP string) error {
 	}
 
 	// Create the script file
-	scriptPath := "/usr/local/bin/unbind-manage"
+	scriptPath := "/usr/local/bin/unbind"
 	if err := os.WriteFile(scriptPath, []byte(managementScriptContent), 0755); err != nil {
 		return fmt.Errorf("failed to write management script: %w", err)
 	}

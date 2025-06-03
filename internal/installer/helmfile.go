@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,6 +13,62 @@ import (
 	"strings"
 	"time"
 )
+
+// Educational facts about Unbind and the installation process
+var unbindInstallationFacts = []string{
+	"You can configure \"Webhooks\" for Discord, Slack, and more to notify you of Unbind deployments and more.",
+	"In Unbind, a \"Team\" is synonymous with a Kubernetes \"namespace\".",
+	"Unbind leverages \"Railpack\" to automatically build your application, without needing to write any scripts or Dockerfiles.",
+	"When you scale a service, traffic is automatically load balanced across all instances.",
+	"New deployments for services are \"rolled out\" one at a time resulting in zero or minimal downtime.",
+	"Unbind is MIT licensed and all component source code is available on GitHub.",
+	"You can add more servers to your cluster at any time, using `unbind add-node` - this will increase the compute capacity of the system.",
+	"Unbind's template system enables zero-configuration deployments of popular services such as Plausible, Ghost, N8N, Supabase, and many more.",
+	"You can view logs and metrics for individual services, or across entire teams, projects, or environments.",
+	"Unbind has full CI/CD capabilities to automatically build and deploy your application to any environment.",
+	"You can create variables at the team, project, environment, or service level and reference them from other services.",
+	"By configuring Memory and CPU limits you can ensure that your services are not starved of resources.",
+	"You can configure S3-compatible storage and automatically backup your databases.",
+	"Unbind services will be exposed on the internal, private network through a DNS-based service discovery system.",
+	"Externally exposed services are automatically secured with TLS using Let's Encrypt certificates.",
+}
+
+// FactRotator manages educational facts display without repetition
+type FactRotator struct {
+	facts     []string
+	remaining []string
+	current   int
+}
+
+// NewFactRotator creates a new fact rotator with shuffled facts
+func NewFactRotator(facts []string) *FactRotator {
+	rotator := &FactRotator{
+		facts: make([]string, len(facts)),
+	}
+	copy(rotator.facts, facts)
+	rotator.shuffle()
+	return rotator
+}
+
+// shuffle randomizes the fact order
+func (f *FactRotator) shuffle() {
+	f.remaining = make([]string, len(f.facts))
+	copy(f.remaining, f.facts)
+	rand.Shuffle(len(f.remaining), func(i, j int) {
+		f.remaining[i], f.remaining[j] = f.remaining[j], f.remaining[i]
+	})
+	f.current = 0
+}
+
+// GetNext returns the next fact, reshuffling when all facts are exhausted
+func (f *FactRotator) GetNext() string {
+	if f.current >= len(f.remaining) {
+		f.shuffle() // Start over with a new shuffle
+	}
+	fact := f.remaining[f.current]
+	f.current++
+	return fact
+}
 
 // SyncHelmfileOptions defines options for the Helmfile sync operation
 type SyncHelmfileOptions struct {
@@ -237,56 +294,46 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Show progress as we prepare to run the command
 				self.logProgress(dependencyName, 0.16, "Starting helmfile sync operation...", nil, StatusInstalling)
 
-				// Set up the command to run helmfile sync
-				cmd := exec.CommandContext(ctx, "helmfile", args...)
-				cmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.kubeConfigPath))
-
-				// Start progress updates during wait
-				waitDone := make(chan error, 1)
-
-				// Define progress stages with meaningful descriptions
-				type progressStage struct {
-					progress float64
-					message  string
-				}
-
-				stages := []progressStage{
-					{0.20, "Initializing Kubernetes cluster..."},
-					{0.25, "Verifying Kubernetes configuration..."},
-					{0.30, "Preparing Helm charts..."},
-					{0.35, "Installing Container Registry..."},
-					{0.40, "Installing PostgreSQL Operator..."},
-					{0.45, "Installing Valkey Cache..."},
-					{0.50, "Installing Ingress Controller..."},
-					{0.55, "Configuring Authentication Services..."},
-					{0.60, "Installing Core Unbind Services..."},
-					{0.65, "Configuring Network Policies..."},
-					{0.70, "Setting up Load Balancer..."},
-					{0.75, "Configuring TLS Certificates..."},
-					{0.80, "Finalizing Service Mesh..."},
-					{0.85, "Completing Installation..."},
-				}
-
-				// Update progress during long-running operations
+				// Start educational facts rotation during the long helmfile sync
+				factsDone := make(chan struct{})
 				go func() {
-					stageIndex := 0
-
-					// Set up a ticker for progress updates - slower to reflect actual 3-minute duration
-					ticker := time.NewTicker(2 * time.Second) // Much slower to spread over ~3 minutes
+					ticker := time.NewTicker(10 * time.Second) // Show a new fact every 10 seconds
 					defer ticker.Stop()
+
+					// Start with some basic progress updates
+					progressStages := []struct {
+						progress    float64
+						baseMessage string
+					}{
+						{0.20, "Initializing Kubernetes cluster"},
+						{0.30, "Installing core components"},
+						{0.45, "Configuring authentication services"},
+						{0.60, "Setting up networking"},
+						{0.75, "Finalizing installation"},
+					}
+					stageIndex := 0
 
 					for {
 						select {
 						case <-ticker.C:
-							if stageIndex < len(stages) {
-								// Send current stage update
-								stage := stages[stageIndex]
-								self.logProgress(dependencyName, stage.progress, stage.message, nil, StatusInstalling)
+							var message string
+							if stageIndex < len(progressStages) {
+								// Combine stage message with educational fact
+								stage := progressStages[stageIndex]
+								fact := self.factRotator.GetNext()
+								message = fmt.Sprintf("%s... Did you know? %s", stage.baseMessage, fact)
 
-								// Advance to next stage after a delay
+								self.logProgress(dependencyName, stage.progress, message, nil, StatusInstalling)
+
+								// Move to next stage every few facts
 								stageIndex++
+							} else {
+								// After all stages, just show facts
+								fact := self.factRotator.GetNext()
+								message = fmt.Sprintf("Completing installation... Did you know? %s", fact)
+								self.logProgress(dependencyName, 0.85, message, nil, StatusInstalling)
 							}
-						case <-waitDone:
+						case <-factsDone:
 							return
 						case <-ctx.Done():
 							return
@@ -295,23 +342,31 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				}()
 
 				// Set the current working directory
+				cmd := exec.CommandContext(ctx, "helmfile", args...)
+				cmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.kubeConfigPath))
 				cmd.Dir = repoDir
+
+				// Start progress updates during wait
+				waitDone := make(chan error, 1)
 
 				// Create pipes for stdout/stderr
 				stdoutPipe, err := cmd.StdoutPipe()
 				if err != nil {
+					close(factsDone)
 					close(waitDone)
 					return fmt.Errorf("failed to create stdout pipe: %w", err)
 				}
 
 				stderrPipe, err := cmd.StderrPipe()
 				if err != nil {
+					close(factsDone)
 					close(waitDone)
 					return fmt.Errorf("failed to create stderr pipe: %w", err)
 				}
 
 				// Start the command
 				if err := cmd.Start(); err != nil {
+					close(factsDone)
 					close(waitDone)
 					return fmt.Errorf("failed to start helmfile sync: %w", err)
 				}
@@ -353,6 +408,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Wait for the command to complete
 				err = cmd.Wait()
 				syncDuration := time.Since(syncStartTime).Round(time.Second)
+				close(factsDone) // Stop showing facts
 				close(waitDone)
 
 				if err != nil {

@@ -291,7 +291,7 @@ func viewInstallationComplete(m Model) string {
 	s.WriteString(m.styles.Bold.Render("Management Options:"))
 	s.WriteString("\n")
 
-	mgmtText := "A management script has been installed at /usr/local/bin/unbind-manage"
+	mgmtText := "A management script has been installed at /usr/local/bin/unbind"
 	for _, line := range wrapText(mgmtText, maxWidth) {
 		s.WriteString(m.styles.Normal.Render(line))
 		s.WriteString("\n")
@@ -302,8 +302,8 @@ func viewInstallationComplete(m Model) string {
 	s.WriteString("\n")
 
 	commands := []string{
-		"• unbind-manage uninstall - Uninstall Unbind (WARNING: This will permanently delete all data)",
-		"• unbind-manage add-node - Show instructions for adding a new node",
+		"• unbind uninstall - Uninstall Unbind (WARNING: This will permanently delete all data)",
+		"• unbind add-node - Show instructions for adding a new node",
 	}
 
 	for _, cmd := range commands {

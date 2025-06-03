@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,6 +13,61 @@ import (
 	"strings"
 	"time"
 )
+
+// Educational facts about the platform being installed
+var platformFacts = []string{
+	"Kubernetes (K8s) is an open-source system that keeps container-ized apps running and scales them automatically.",
+	"An \"operator\" is a program that can extend the functionality of a Kubernetes cluster - like a plugin.",
+	"K3s is a lightweight edition of Kubernetes packaged as a single small binary.",
+	"K3s can run a full cluster on devices with as little as 512 MB of RAM, even a Raspberry Pi.",
+	"K3s uses an embedded SQLite database by default, so no separate etcd cluster is required.",
+	"K3s automatically creates and renews TLS certificates to keep cluster traffic encrypted.",
+	"K3s supports both x86-64 and ARM CPUs, covering PCs, cloud VMs, and IoT boards.",
+	"K3s runs containers with containerd instead of Docker for a lighter footprint.",
+	"Kubernetes is \"self-healing\" - it will automatically restart failed containers or replace them with new ones.",
+	"Helm is a package manager for Kubernetes that installs apps from \"helm charts.\"",
+	"Helmfile groups multiple Helm charts so you can deploy an entire stack declaratively.",
+	"Longhorn adds persistent, replicated block storage to your Kubernetes cluster.",
+	"Longhorn provides a web UI for creating, resizing, and restoring storage volumes.",
+	"A single command can install K3s, and the cluster typically starts in under 30 seconds.",
+}
+
+// FactRotator manages educational facts display without repetition
+type FactRotator struct {
+	facts     []string
+	remaining []string
+	current   int
+}
+
+// NewFactRotator creates a new fact rotator with shuffled facts
+func NewFactRotator(facts []string) *FactRotator {
+	rotator := &FactRotator{
+		facts: make([]string, len(facts)),
+	}
+	copy(rotator.facts, facts)
+	rotator.shuffle()
+	return rotator
+}
+
+// shuffle randomizes the fact order
+func (f *FactRotator) shuffle() {
+	f.remaining = make([]string, len(f.facts))
+	copy(f.remaining, f.facts)
+	rand.Shuffle(len(f.remaining), func(i, j int) {
+		f.remaining[i], f.remaining[j] = f.remaining[j], f.remaining[i]
+	})
+	f.current = 0
+}
+
+// GetNext returns the next fact, reshuffling when all facts are exhausted
+func (f *FactRotator) GetNext() string {
+	if f.current >= len(f.remaining) {
+		f.shuffle() // Start over with a new shuffle
+	}
+	fact := f.remaining[f.current]
+	f.current++
+	return fact
+}
 
 // InstallationStep represents a single step in the k3s setup
 type InstallationStep struct {
@@ -44,6 +100,8 @@ type Installer struct {
 		status    string
 		lastMsg   K3SUpdateMessage
 	}
+	// Fact rotator for educational information
+	factRotator *FactRotator
 }
 
 // NewInstaller creates an installer instance
@@ -55,6 +113,9 @@ func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage) *In
 
 	// Initialize state
 	inst.state.status = "pending"
+
+	// Initialize fact rotator
+	inst.factRotator = NewFactRotator(platformFacts)
 
 	return inst
 }
@@ -203,12 +264,33 @@ fs.inotify.max_user_instances = 2099999999`
 			Progress:    0.35, // Much larger allocation since this takes 2-3 minutes
 			Action: func(ctx context.Context) error {
 				self.log(fmt.Sprintf("Running K3S installer with flags: %s", k3sInstallFlags))
+
+				// Start a goroutine to show educational facts during installation
+				factsDone := make(chan struct{})
+				go func() {
+					ticker := time.NewTicker(8 * time.Second) // Show a new fact every 8 seconds
+					defer ticker.Stop()
+
+					for {
+						select {
+						case <-ticker.C:
+							fact := self.factRotator.GetNext()
+							self.logProgress(0.35, "installing", fmt.Sprintf("Installing K3S... Did you know? %s", fact), nil)
+						case <-factsDone:
+							return
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
+
 				installCmd := exec.CommandContext(ctx, "/bin/sh", "/tmp/k3s-installer.sh")
 				installCmd.Env = append(os.Environ(), fmt.Sprintf("INSTALL_K3S_EXEC=%s", k3sInstallFlags))
 
 				installOutput, err := installCmd.CombinedOutput()
-				installOutputStr := string(installOutput)
+				close(factsDone) // Stop showing facts
 
+				installOutputStr := string(installOutput)
 				self.log(fmt.Sprintf("Installation output: %s", installOutputStr))
 
 				if err != nil {
@@ -277,16 +359,37 @@ fs.inotify.max_user_instances = 2099999999`
 			Description: "Installing Helm and dependencies",
 			Progress:    0.65, // Larger allocation since this can take 1-2 minutes
 			Action: func(ctx context.Context) error {
+				// Start showing educational facts during Helm installation
+				factsDone := make(chan struct{})
+				go func() {
+					ticker := time.NewTicker(6 * time.Second) // Show a new fact every 6 seconds
+					defer ticker.Stop()
+
+					for {
+						select {
+						case <-ticker.C:
+							fact := self.factRotator.GetNext()
+							self.logProgress(0.65, "installing", fmt.Sprintf("Installing Helm... Did you know? %s", fact), nil)
+						case <-factsDone:
+							return
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
+
 				// Find an appropriate bin directory first
 				binPath := "/usr/local/bin"
 				if !canWriteToDir(binPath) {
 					// Try user's local bin directory instead
 					home, err := os.UserHomeDir()
 					if err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to get home directory: %w", err)
 					}
 					binPath = filepath.Join(home, ".local", "bin")
 					if err := os.MkdirAll(binPath, 0755); err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to create bin directory: %w", err)
 					}
 
@@ -308,6 +411,7 @@ fs.inotify.max_user_instances = 2099999999`
 					// Create temp directory for download
 					tempDir, err := os.MkdirTemp("", "helm-*")
 					if err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to create temp directory: %w", err)
 					}
 					defer os.RemoveAll(tempDir)
@@ -334,6 +438,7 @@ fs.inotify.max_user_instances = 2099999999`
 					// Download Helm
 					tarPath := filepath.Join(tempDir, "helm.tar.gz")
 					if err := self.downloadFile(url, tarPath); err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to download helm: %w", err)
 					}
 
@@ -342,6 +447,7 @@ fs.inotify.max_user_instances = 2099999999`
 					// Extract the file
 					cmd = exec.CommandContext(ctx, "tar", "-xzf", tarPath, "-C", tempDir)
 					if out, err := cmd.CombinedOutput(); err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to extract helm: %w, output: %s", err, string(out))
 					}
 
@@ -353,10 +459,12 @@ fs.inotify.max_user_instances = 2099999999`
 
 					input, err := os.ReadFile(sourcePath)
 					if err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to read helm binary: %w", err)
 					}
 
 					if err = os.WriteFile(destPath, input, 0755); err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to install helm: %w", err)
 					}
 
@@ -364,6 +472,7 @@ fs.inotify.max_user_instances = 2099999999`
 					cmd = exec.CommandContext(ctx, destPath, "version")
 					out, err = cmd.CombinedOutput()
 					if err != nil {
+						close(factsDone)
 						return fmt.Errorf("helm installation verification failed: %w", err)
 					}
 
@@ -379,6 +488,7 @@ fs.inotify.max_user_instances = 2099999999`
 					self.log("Installing Helm diff plugin...")
 					cmd = exec.CommandContext(ctx, "helm", "plugin", "install", "https://github.com/databus23/helm-diff")
 					if out, err := cmd.CombinedOutput(); err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to install helm diff plugin: %w, output: %s", err, string(out))
 					}
 
@@ -386,6 +496,7 @@ fs.inotify.max_user_instances = 2099999999`
 					cmd = exec.CommandContext(ctx, "helm", "plugin", "list")
 					out, err = cmd.CombinedOutput()
 					if err != nil || !strings.Contains(string(out), "diff") {
+						close(factsDone)
 						return fmt.Errorf("helm diff plugin installation verification failed: %w", err)
 					}
 
@@ -402,6 +513,7 @@ fs.inotify.max_user_instances = 2099999999`
 					self.log("Helmfile not found, installing...")
 					tempDir, err := os.MkdirTemp("", "helmfile-*")
 					if err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to create temp directory: %w", err)
 					}
 					defer os.RemoveAll(tempDir)
@@ -424,6 +536,7 @@ fs.inotify.max_user_instances = 2099999999`
 					// Download helmfile
 					tarPath := filepath.Join(tempDir, "helmfile.tar.gz")
 					if err := self.downloadFile(url, tarPath); err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to download helmfile: %w", err)
 					}
 
@@ -432,6 +545,7 @@ fs.inotify.max_user_instances = 2099999999`
 					// Extract the file
 					cmd = exec.CommandContext(ctx, "tar", "-xzf", tarPath, "-C", tempDir)
 					if out, err := cmd.CombinedOutput(); err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to extract helmfile: %w, output: %s", err, string(out))
 					}
 
@@ -441,10 +555,12 @@ fs.inotify.max_user_instances = 2099999999`
 
 					input, err := os.ReadFile(sourcePath)
 					if err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to read helmfile binary: %w", err)
 					}
 
 					if err = os.WriteFile(destPath, input, 0755); err != nil {
+						close(factsDone)
 						return fmt.Errorf("failed to install helmfile: %w", err)
 					}
 
@@ -452,12 +568,14 @@ fs.inotify.max_user_instances = 2099999999`
 					cmd = exec.CommandContext(ctx, destPath, "--version")
 					out, err = cmd.CombinedOutput()
 					if err != nil {
+						close(factsDone)
 						return fmt.Errorf("helmfile installation verification failed: %w", err)
 					}
 
 					self.log(fmt.Sprintf("Helmfile successfully installed: %s", strings.TrimSpace(string(out))))
 				}
 
+				close(factsDone) // Stop showing facts
 				return nil
 			},
 		},
@@ -493,10 +611,30 @@ fs.inotify.max_user_instances = 2099999999`
 			Description: "Installing Longhorn storage system",
 			Progress:    0.85, // Larger allocation since Longhorn installation takes significant time
 			Action: func(ctx context.Context) error {
+				// Start showing educational facts during Longhorn installation
+				factsDone := make(chan struct{})
+				go func() {
+					ticker := time.NewTicker(7 * time.Second) // Show a new fact every 7 seconds
+					defer ticker.Stop()
+
+					for {
+						select {
+						case <-ticker.C:
+							fact := self.factRotator.GetNext()
+							self.logProgress(0.85, "installing", fmt.Sprintf("Installing Longhorn... Did you know? %s", fact), nil)
+						case <-factsDone:
+							return
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
+
 				// Add Longhorn Helm repo
 				self.log("Adding Longhorn Helm repository...")
 				repoCmd := exec.CommandContext(ctx, "helm", "repo", "add", "longhorn", "https://charts.longhorn.io")
 				if output, err := repoCmd.CombinedOutput(); err != nil {
+					close(factsDone)
 					return fmt.Errorf("failed to add Longhorn Helm repo: %w, output: %s", err, string(output))
 				}
 
@@ -504,6 +642,7 @@ fs.inotify.max_user_instances = 2099999999`
 				self.log("Updating Helm repositories...")
 				updateCmd := exec.CommandContext(ctx, "helm", "repo", "update")
 				if output, err := updateCmd.CombinedOutput(); err != nil {
+					close(factsDone)
 					return fmt.Errorf("failed to update Helm repos: %w, output: %s", err, string(output))
 				}
 
@@ -549,6 +688,7 @@ fs.inotify.max_user_instances = 2099999999`
 				installCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 
 				if output, err := installCmd.CombinedOutput(); err != nil {
+					close(factsDone)
 					return fmt.Errorf("failed to install Longhorn: %w, output: %s", err, string(output))
 				}
 
@@ -557,6 +697,7 @@ fs.inotify.max_user_instances = 2099999999`
 				waitCmd := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition=ready", "pod", "-l", "app=longhorn-manager", "-n", "longhorn-system", "--timeout=300s")
 				waitCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 				if output, err := waitCmd.CombinedOutput(); err != nil {
+					close(factsDone)
 					return fmt.Errorf("failed waiting for Longhorn to be ready: %w, output: %s", err, string(output))
 				}
 
@@ -569,6 +710,7 @@ fs.inotify.max_user_instances = 2099999999`
 					self.log(fmt.Sprintf("Warning: Failed to remove default annotation from local-path storage class: %s", string(output)))
 				}
 
+				close(factsDone) // Stop showing facts
 				return nil
 			},
 		},
