@@ -42,6 +42,10 @@ type Model struct {
 	logMessages []string
 	logChan     chan string
 
+	// Educational facts
+	factChan    chan string
+	currentFact string
+
 	// Feature-specific data
 	dnsInfo           *dnsInfo
 	domainInput       textinput.Model
@@ -81,9 +85,9 @@ func NewModel(version string) Model {
 	s.Style = styles.SpinnerStyle
 
 	// Create buffered channels to prevent blocking
-	logChan := make(chan string, 100) // Buffer for log messages
+	logChan := make(chan string, 1000)
 	progressChan := make(chan installer.UnbindInstallUpdateMsg, 100)
-	packageProgressChan := make(chan packageInstallProgressMsg, 50)
+	packageProgressChan := make(chan packageInstallProgressMsg, 100)
 	k3sProgressChan := make(chan k3s.K3SUpdateMessage, 100)
 
 	// Initialize domain input
@@ -119,7 +123,8 @@ func NewModel(version string) Model {
 		return nil
 	}
 
-	return Model{
+	// Initialize channels
+	model := Model{
 		version:            version,
 		state:              StateWelcome,
 		showDebugLogs:      false, // Initialize debug logs flag
@@ -154,7 +159,10 @@ func NewModel(version string) Model {
 		selectedRegistry:    0, // Default to Docker Hub
 		swapSizeInput:       swapInput,
 		packageProgressChan: packageProgressChan,
+		factChan:            make(chan string, 10),
 	}
+
+	return model
 }
 
 // Init is the Bubble Tea initialization function
@@ -163,6 +171,7 @@ func (self Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		self.spinner.Tick, // Start the spinner
 		self.listenForLogs(),
+		self.listenForFacts(),
 	}
 
 	return tea.Batch(cmds...)
@@ -201,6 +210,12 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if logMsg, ok := msg.(logMsg); ok {
 		self.logMessages = append(self.logMessages, logMsg.message)
 		return self, self.listenForLogs()
+	}
+
+	// Process fact messages (applies to all states)
+	if factMsg, ok := msg.(factMsg); ok {
+		self.currentFact = factMsg.fact
+		return self, self.listenForFacts()
 	}
 
 	// Handle progress channel cleanup signals
@@ -514,6 +529,18 @@ func (self Model) listenForUnbindProgress() tea.Cmd {
 			return unbindProgressCompletedMsg{}
 		}
 		return msg
+	}
+}
+
+// listenForFacts returns a command that listens for educational facts
+func (self Model) listenForFacts() tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case fact := <-self.factChan:
+			return factMsg{fact: fact}
+		default:
+			return nil
+		}
 	}
 }
 

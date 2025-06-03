@@ -14,6 +14,7 @@ type UnbindInstaller struct {
 	progressChan   chan<- UnbindInstallUpdateMsg
 	kubeClient     *kubernetes.Clientset
 	LogChan        chan<- string
+	FactChan       chan<- string
 	helmEnv        *cli.EnvSettings
 	state          map[string]*dependencyState
 	kubeConfigPath string
@@ -40,7 +41,7 @@ type InstallationStep struct {
 	Action      func(context.Context) error
 }
 
-func NewUnbindInstaller(kubeConfig string, logChan chan<- string, progressChan chan<- UnbindInstallUpdateMsg) (*UnbindInstaller, error) {
+func NewUnbindInstaller(kubeConfig string, logChan chan<- string, progressChan chan<- UnbindInstallUpdateMsg, factChan chan<- string) (*UnbindInstaller, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
 	if err != nil {
 		logChan <- "Error creating kubeconfig: " + err.Error()
@@ -58,6 +59,7 @@ func NewUnbindInstaller(kubeConfig string, logChan chan<- string, progressChan c
 		kubeConfigPath: kubeConfig,
 		kubeClient:     clientset,
 		LogChan:        logChan,
+		FactChan:       factChan,
 		helmEnv:        cli.New(),
 		state:          make(map[string]*dependencyState),
 	}
@@ -233,6 +235,18 @@ func (self *UnbindInstaller) sendUpdateMessage(name string) {
 func (self *UnbindInstaller) sendLog(message string) {
 	if self.LogChan != nil {
 		self.LogChan <- message
+	}
+}
+
+// sendFact sends an educational fact to the UI
+func (self *UnbindInstaller) sendFact(fact string) {
+	if self.FactChan != nil {
+		select {
+		case self.FactChan <- fact:
+			// Fact sent successfully
+		default:
+			// Channel is full, skip this fact
+		}
 	}
 }
 

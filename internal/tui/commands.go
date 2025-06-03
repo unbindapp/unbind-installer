@@ -288,7 +288,7 @@ func (self Model) detectWildcard(base string) (dnsValid, behindCF bool) {
 func (self Model) installK3S() tea.Cmd {
 	return func() tea.Msg {
 		// Create a new K3S installer
-		installer := k3s.NewInstaller(self.logChan, self.k3sProgressChan)
+		installer := k3s.NewInstaller(self.logChan, self.k3sProgressChan, self.factChan)
 
 		// Create a context with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
@@ -315,7 +315,7 @@ func (self Model) installK3S() tea.Cmd {
 		}
 
 		// Create the unbind installer, using the channels we already have in the model
-		unbindInstaller, err := unbindInstaller.NewUnbindInstaller(kubeConfig, self.logChan, self.unbindProgressChan)
+		unbindInstaller, err := unbindInstaller.NewUnbindInstaller(kubeConfig, self.logChan, self.unbindProgressChan, self.factChan)
 		if err != nil {
 			self.log(fmt.Sprintf("Failed to create Unbind installer: %s", err.Error()))
 			return errMsg{err: errdefs.NewCustomError(errdefs.ErrTypeK3sInstallFailed, "Failed to create Unbind installer")}

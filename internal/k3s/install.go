@@ -93,6 +93,8 @@ type Installer struct {
 	LogChan chan<- string
 	// Update message channel
 	UpdateChan chan<- K3SUpdateMessage
+	// Fact message channel
+	FactChan chan<- string
 	// Installation state
 	state struct {
 		startTime time.Time
@@ -105,10 +107,11 @@ type Installer struct {
 }
 
 // NewInstaller creates an installer instance
-func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage) *Installer {
+func NewInstaller(logChan chan<- string, updateChan chan<- K3SUpdateMessage, factChan chan<- string) *Installer {
 	inst := &Installer{
 		LogChan:    logChan,
 		UpdateChan: updateChan,
+		FactChan:   factChan,
 	}
 
 	// Initialize state
@@ -185,6 +188,18 @@ func (self *Installer) sendUpdateMessage(progress float64, status string, descri
 		default:
 			// Channel is full, log it but don't block
 			self.log("Warning: Progress update channel is full")
+		}
+	}
+}
+
+// sendFact sends an educational fact to the UI
+func (self *Installer) sendFact(fact string) {
+	if self.FactChan != nil {
+		select {
+		case self.FactChan <- fact:
+			// Fact sent successfully
+		default:
+			// Channel is full, skip this fact
 		}
 	}
 }
@@ -275,7 +290,7 @@ fs.inotify.max_user_instances = 2099999999`
 						select {
 						case <-ticker.C:
 							fact := self.factRotator.GetNext()
-							self.logProgress(0.35, "installing", fmt.Sprintf("Installing K3S... Did you know? %s", fact), nil)
+							self.sendFact(fact)
 						case <-factsDone:
 							return
 						case <-ctx.Done():
@@ -369,7 +384,7 @@ fs.inotify.max_user_instances = 2099999999`
 						select {
 						case <-ticker.C:
 							fact := self.factRotator.GetNext()
-							self.logProgress(0.65, "installing", fmt.Sprintf("Installing Helm... Did you know? %s", fact), nil)
+							self.sendFact(fact)
 						case <-factsDone:
 							return
 						case <-ctx.Done():
@@ -621,7 +636,7 @@ fs.inotify.max_user_instances = 2099999999`
 						select {
 						case <-ticker.C:
 							fact := self.factRotator.GetNext()
-							self.logProgress(0.85, "installing", fmt.Sprintf("Installing Longhorn... Did you know? %s", fact), nil)
+							self.sendFact(fact)
 						case <-factsDone:
 							return
 						case <-ctx.Done():

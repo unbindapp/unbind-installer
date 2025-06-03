@@ -101,6 +101,11 @@ type registryValidationCompleteMsg struct {
 	success bool
 }
 
+// Educational fact message
+type factMsg struct {
+	fact string
+}
+
 // Progress channel completion signals
 
 // k3sProgressCompletedMsg to stop progress listener

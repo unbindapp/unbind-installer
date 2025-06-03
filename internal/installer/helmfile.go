@@ -300,39 +300,11 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					ticker := time.NewTicker(10 * time.Second) // Show a new fact every 10 seconds
 					defer ticker.Stop()
 
-					// Start with some basic progress updates
-					progressStages := []struct {
-						progress    float64
-						baseMessage string
-					}{
-						{0.20, "Initializing Kubernetes cluster"},
-						{0.30, "Installing core components"},
-						{0.45, "Configuring authentication services"},
-						{0.60, "Setting up networking"},
-						{0.75, "Finalizing installation"},
-					}
-					stageIndex := 0
-
 					for {
 						select {
 						case <-ticker.C:
-							var message string
-							if stageIndex < len(progressStages) {
-								// Combine stage message with educational fact
-								stage := progressStages[stageIndex]
-								fact := self.factRotator.GetNext()
-								message = fmt.Sprintf("%s... Did you know? %s", stage.baseMessage, fact)
-
-								self.logProgress(dependencyName, stage.progress, message, nil, StatusInstalling)
-
-								// Move to next stage every few facts
-								stageIndex++
-							} else {
-								// After all stages, just show facts
-								fact := self.factRotator.GetNext()
-								message = fmt.Sprintf("Completing installation... Did you know? %s", fact)
-								self.logProgress(dependencyName, 0.85, message, nil, StatusInstalling)
-							}
+							fact := self.factRotator.GetNext()
+							self.sendFact(fact)
 						case <-factsDone:
 							return
 						case <-ctx.Done():
@@ -341,13 +313,47 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					}
 				}()
 
-				// Set the current working directory
+				// Set up the command to run helmfile sync
 				cmd := exec.CommandContext(ctx, "helmfile", args...)
 				cmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.kubeConfigPath))
 				cmd.Dir = repoDir
 
 				// Start progress updates during wait
 				waitDone := make(chan error, 1)
+
+				// Basic progress updates
+				progressStages := []struct {
+					progress    float64
+					baseMessage string
+				}{
+					{0.20, "Initializing Kubernetes cluster"},
+					{0.30, "Installing core components"},
+					{0.45, "Configuring authentication services"},
+					{0.60, "Setting up networking"},
+					{0.75, "Finalizing installation"},
+				}
+
+				// Start progress stage updates
+				go func() {
+					ticker := time.NewTicker(15 * time.Second) // Update stages every 15 seconds
+					defer ticker.Stop()
+					stageIndex := 0
+
+					for {
+						select {
+						case <-ticker.C:
+							if stageIndex < len(progressStages) {
+								stage := progressStages[stageIndex]
+								self.logProgress(dependencyName, stage.progress, stage.baseMessage, nil, StatusInstalling)
+								stageIndex++
+							}
+						case <-factsDone:
+							return
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
 
 				// Create pipes for stdout/stderr
 				stdoutPipe, err := cmd.StdoutPipe()

@@ -153,6 +153,19 @@ func viewInstallingUnbind(m Model) string {
 	}
 	s.WriteString("\n")
 
+	// Educational facts section
+	if m.currentFact != "" {
+		s.WriteString(m.styles.Bold.Render("Did you know?"))
+		s.WriteString("\n")
+		factLines := wrapText(m.currentFact, maxWidth-2)
+		for _, line := range factLines {
+			s.WriteString("  ")
+			s.WriteString(m.styles.Subtle.Render(line))
+			s.WriteString("\n")
+		}
+		s.WriteString("\n")
+	}
+
 	return renderWithLayout(m, s.String())
 }
 
