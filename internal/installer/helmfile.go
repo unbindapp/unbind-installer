@@ -24,7 +24,7 @@ var unbindInstallationFacts = []string{
 	"Unbind is MIT licensed and all component source code is available on GitHub.",
 	"You can add more servers to your cluster at any time, using `unbind add-node` - this will increase the compute capacity of the system.",
 	"Unbind's template system enables zero-configuration deployments of popular services such as Plausible, Ghost, N8N, Supabase, and many more.",
-	"You can view logs and metrics for individual services, or across entire teams, projects, or environments.",
+	"You can view logs and metrics for individual services - or across entire teams, projects, and environments.",
 	"Unbind has full CI/CD capabilities to automatically build and deploy your application to any environment.",
 	"You can create variables at the team, project, environment, or service level and reference them from other services.",
 	"By configuring Memory and CPU limits you can ensure that your services are not starved of resources.",
@@ -297,7 +297,11 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				// Start educational facts rotation during the long helmfile sync
 				factsDone := make(chan struct{})
 				go func() {
-					ticker := time.NewTicker(10 * time.Second) // Show a new fact every 10 seconds
+					// Show first fact immediately
+					fact := self.factRotator.GetNext()
+					self.sendFact(fact)
+
+					ticker := time.NewTicker(8 * time.Second) // Show a new fact every 8 seconds
 					defer ticker.Stop()
 
 					for {

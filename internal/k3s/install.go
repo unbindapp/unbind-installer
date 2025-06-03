@@ -283,7 +283,11 @@ fs.inotify.max_user_instances = 2099999999`
 				// Start a goroutine to show educational facts during installation
 				factsDone := make(chan struct{})
 				go func() {
-					ticker := time.NewTicker(8 * time.Second) // Show a new fact every 8 seconds
+					// Show first fact immediately
+					fact := self.factRotator.GetNext()
+					self.sendFact(fact)
+
+					ticker := time.NewTicker(5 * time.Second) // Show a new fact every 5 seconds
 					defer ticker.Stop()
 
 					for {
@@ -377,7 +381,11 @@ fs.inotify.max_user_instances = 2099999999`
 				// Start showing educational facts during Helm installation
 				factsDone := make(chan struct{})
 				go func() {
-					ticker := time.NewTicker(6 * time.Second) // Show a new fact every 6 seconds
+					// Show first fact immediately
+					fact := self.factRotator.GetNext()
+					self.sendFact(fact)
+
+					ticker := time.NewTicker(5 * time.Second) // Show a new fact every 5 seconds
 					defer ticker.Stop()
 
 					for {
@@ -629,7 +637,11 @@ fs.inotify.max_user_instances = 2099999999`
 				// Start showing educational facts during Longhorn installation
 				factsDone := make(chan struct{})
 				go func() {
-					ticker := time.NewTicker(7 * time.Second) // Show a new fact every 7 seconds
+					// Show first fact immediately
+					fact := self.factRotator.GetNext()
+					self.sendFact(fact)
+
+					ticker := time.NewTicker(5 * time.Second) // Show a new fact every 5 seconds
 					defer ticker.Stop()
 
 					for {
@@ -644,6 +656,16 @@ fs.inotify.max_user_instances = 2099999999`
 						}
 					}
 				}()
+
+				// Enable and start iSCSI daemon (required for Longhorn)
+				self.log("Enabling iSCSI daemon for Longhorn storage...")
+				iscsidCmd := exec.CommandContext(ctx, "systemctl", "enable", "--now", "iscsid")
+				if output, err := iscsidCmd.CombinedOutput(); err != nil {
+					// Log warning but don't fail the installation
+					self.log(fmt.Sprintf("Warning: Failed to enable iscsid service: %v, output: %s", err, string(output)))
+				} else {
+					self.log("iSCSI daemon enabled successfully")
+				}
 
 				// Add Longhorn Helm repo
 				self.log("Adding Longhorn Helm repository...")
