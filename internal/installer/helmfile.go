@@ -47,7 +47,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 	return self.InstallDependencyWithSteps(ctx, dependencyName, []InstallationStep{
 		{
 			Description: "Creating temporary directory",
-			Progress:    0.15,
+			Progress:    0.02,
 			Action: func(ctx context.Context) error {
 				var err error
 				repoDir, err = os.MkdirTemp("", "unbind-charts-*")
@@ -59,9 +59,9 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 		},
 		{
 			Description: "Cloning repository",
-			Progress:    0.20,
+			Progress:    0.05,
 			Action: func(ctx context.Context) error {
-				self.logProgress(dependencyName, 0.20, fmt.Sprintf("Preparing to clone from %s", opts.RepoURL), nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.05, fmt.Sprintf("Preparing to clone from %s", opts.RepoURL), nil, StatusInstalling)
 
 				// First check if git is installed
 				checkCmd := exec.CommandContext(ctx, "git", "--version")
@@ -70,7 +70,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				}
 
 				// Send explicit progress update that we're starting the clone
-				self.logProgress(dependencyName, 0.21, "Initializing git clone...", nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.06, "Initializing git clone...", nil, StatusInstalling)
 
 				// Set up progress updates during clone
 				cloneDone := make(chan struct{})
@@ -78,7 +78,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					ticker := time.NewTicker(150 * time.Millisecond) // Faster updates
 					defer ticker.Stop()
 
-					currentProgress := 0.21
+					currentProgress := 0.06
 					messages := []string{
 						"Initializing git clone...",
 						"Connecting to repository...",
@@ -91,13 +91,13 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 					for {
 						select {
 						case <-ticker.C:
-							if currentProgress < 0.28 {
+							if currentProgress < 0.10 {
 								// Increase progress increment for faster movement
 								currentProgress += 0.015
 
 								// Rotate through different messages more frequently
-								if currentProgress > 0.21 && msgIndex < len(messages)-1 &&
-									currentProgress > 0.21+float64(msgIndex)*0.01 {
+								if currentProgress > 0.06 && msgIndex < len(messages)-1 &&
+									currentProgress > 0.06+float64(msgIndex)*0.01 {
 									msgIndex++
 								}
 
@@ -131,7 +131,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				}
 
 				// Add progress update before starting the command
-				self.logProgress(dependencyName, 0.22, "Starting git clone operation...", nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.07, "Starting git clone operation...", nil, StatusInstalling)
 
 				if err := cmd.Start(); err != nil {
 					close(cloneDone)
@@ -147,9 +147,9 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 
 						// Use output to trigger progress updates
 						if strings.Contains(line, "Receiving objects") {
-							self.logProgress(dependencyName, 0.23, "Receiving objects from repository...", nil, StatusInstalling)
+							self.logProgress(dependencyName, 0.08, "Receiving objects from repository...", nil, StatusInstalling)
 						} else if strings.Contains(line, "Resolving deltas") {
-							self.logProgress(dependencyName, 0.25, "Resolving deltas...", nil, StatusInstalling)
+							self.logProgress(dependencyName, 0.10, "Resolving deltas...", nil, StatusInstalling)
 						}
 					}
 				}()
@@ -163,9 +163,9 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 
 						// Use output to trigger progress updates
 						if strings.Contains(line, "Cloning into") {
-							self.logProgress(dependencyName, 0.22, "Initializing repository...", nil, StatusInstalling)
+							self.logProgress(dependencyName, 0.07, "Initializing repository...", nil, StatusInstalling)
 						} else if strings.Contains(line, "remote:") {
-							self.logProgress(dependencyName, 0.24, "Connected to remote repository...", nil, StatusInstalling)
+							self.logProgress(dependencyName, 0.09, "Connected to remote repository...", nil, StatusInstalling)
 						}
 					}
 				}()
@@ -178,17 +178,17 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				}
 
 				// Signal cloning is complete with another explicit update
-				self.logProgress(dependencyName, 0.28, "Repository cloned successfully", nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.08, "Repository cloned successfully", nil, StatusInstalling)
 
 				// Signal moving to next step
-				self.logProgress(dependencyName, 0.29, fmt.Sprintf("Preparing to run helmfile in %s", repoDir), nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.10, fmt.Sprintf("Preparing to run helmfile in %s", repoDir), nil, StatusInstalling)
 
 				return nil
 			},
 		},
 		{
 			Description: "Running helmfile sync",
-			Progress:    0.30,
+			Progress:    0.15,
 			Action: func(ctx context.Context) error {
 				// Construct arguments for helmfile command
 				args := []string{
@@ -232,10 +232,10 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				args = append(args, "sync")
 
 				// Immediately report that we're starting the helmfile sync
-				self.logProgress(dependencyName, 0.30, "Preparing helmfile command...", nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.15, "Preparing helmfile command...", nil, StatusInstalling)
 
 				// Show progress as we prepare to run the command
-				self.logProgress(dependencyName, 0.31, "Starting helmfile sync operation...", nil, StatusInstalling)
+				self.logProgress(dependencyName, 0.16, "Starting helmfile sync operation...", nil, StatusInstalling)
 
 				// Set up the command to run helmfile sync
 				cmd := exec.CommandContext(ctx, "helmfile", args...)
@@ -251,25 +251,28 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				}
 
 				stages := []progressStage{
-					{0.35, "Initializing Kubernetes cluster..."},
-					{0.40, "Verifying Kubernetes configuration..."},
-					{0.45, "Preparing Helm charts..."},
-					{0.50, "Installing Container Registry..."},
-					{0.55, "Installing PostgreSQL Operator..."},
-					{0.60, "Installing Valkey Cache..."},
-					{0.65, "Installing Ingress Controller..."},
-					{0.70, "Configuring Authentication Services..."},
-					{0.75, "Installing Core Unbind Services..."},
-					{0.80, "Configuring Network Policies..."},
-					{0.85, "Finalizing Installation..."},
+					{0.20, "Initializing Kubernetes cluster..."},
+					{0.25, "Verifying Kubernetes configuration..."},
+					{0.30, "Preparing Helm charts..."},
+					{0.35, "Installing Container Registry..."},
+					{0.40, "Installing PostgreSQL Operator..."},
+					{0.45, "Installing Valkey Cache..."},
+					{0.50, "Installing Ingress Controller..."},
+					{0.55, "Configuring Authentication Services..."},
+					{0.60, "Installing Core Unbind Services..."},
+					{0.65, "Configuring Network Policies..."},
+					{0.70, "Setting up Load Balancer..."},
+					{0.75, "Configuring TLS Certificates..."},
+					{0.80, "Finalizing Service Mesh..."},
+					{0.85, "Completing Installation..."},
 				}
 
 				// Update progress during long-running operations
 				go func() {
 					stageIndex := 0
 
-					// Set up a ticker for progress updates
-					ticker := time.NewTicker(800 * time.Millisecond) // Slightly slower to allow more visible stages
+					// Set up a ticker for progress updates - slower to reflect actual 3-minute duration
+					ticker := time.NewTicker(2 * time.Second) // Much slower to spread over ~3 minutes
 					defer ticker.Stop()
 
 					for {
@@ -354,7 +357,7 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 
 				if err != nil {
 					failMsg := fmt.Sprintf("Helmfile sync failed after %v: %v", syncDuration, err)
-					self.logProgress(dependencyName, 0.30, failMsg, err, StatusFailed)
+					self.logProgress(dependencyName, 0.15, failMsg, err, StatusFailed)
 					return fmt.Errorf("helmfile sync failed after %v: %w", syncDuration, err)
 				}
 
@@ -413,8 +416,8 @@ func (self *UnbindInstaller) downloadFileWithProgress(url, filepath string) erro
 		Installer:     self,
 		Dependency:    "helmfile-sync",
 		LastProgress:  float64(0),
-		StartProgress: 0.06,
-		EndProgress:   0.07,
+		StartProgress: 0.01,
+		EndProgress:   0.02,
 	}
 
 	// Copy while counting progress
@@ -493,7 +496,7 @@ func (self *UnbindInstaller) updateProgressBasedOnOutput(dependency string, outp
 		if len(parts) > 1 {
 			chartName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
 		}
-		self.logProgress(dependency, 0.40, fmt.Sprintf("Processing %s", chartName), nil, StatusInstalling)
+		self.logProgress(dependency, 0.25, fmt.Sprintf("Processing %s", chartName), nil, StatusInstalling)
 
 	case containsString(output, "Installing chart"):
 		// Extract chart name if possible
@@ -502,7 +505,7 @@ func (self *UnbindInstaller) updateProgressBasedOnOutput(dependency string, outp
 		if len(parts) > 1 {
 			chartName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
 		}
-		self.logProgress(dependency, 0.55, fmt.Sprintf("Installing %s", chartName), nil, StatusInstalling)
+		self.logProgress(dependency, 0.40, fmt.Sprintf("Installing %s", chartName), nil, StatusInstalling)
 
 	case containsString(output, "Installing release"):
 		// Extract release name if possible
@@ -511,10 +514,10 @@ func (self *UnbindInstaller) updateProgressBasedOnOutput(dependency string, outp
 		if len(parts) > 1 {
 			releaseName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
 		}
-		self.logProgress(dependency, 0.65, fmt.Sprintf("Installing %s", releaseName), nil, StatusInstalling)
+		self.logProgress(dependency, 0.55, fmt.Sprintf("Installing %s", releaseName), nil, StatusInstalling)
 
 	case containsString(output, "Building dependency release"):
-		self.logProgress(dependency, 0.75, "Building dependency releases", nil, StatusInstalling)
+		self.logProgress(dependency, 0.65, "Building dependency releases", nil, StatusInstalling)
 
 	case containsString(output, "Upgrading release"):
 		// Extract release name if possible
@@ -523,7 +526,7 @@ func (self *UnbindInstaller) updateProgressBasedOnOutput(dependency string, outp
 		if len(parts) > 1 {
 			releaseName = strings.TrimSpace(strings.Split(parts[1], " ")[0])
 		}
-		self.logProgress(dependency, 0.80, fmt.Sprintf("Upgrading %s", releaseName), nil, StatusInstalling)
+		self.logProgress(dependency, 0.75, fmt.Sprintf("Upgrading %s", releaseName), nil, StatusInstalling)
 
 	case containsString(output, "UPDATED RELEASES:"):
 		self.logProgress(dependency, 0.85, "Finalizing release updates", nil, StatusInstalling)
