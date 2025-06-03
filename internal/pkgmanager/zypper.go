@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"time"
 )
 
 // ZypperInstaller handles installation of zypper packages
@@ -25,54 +26,91 @@ func (self *ZypperInstaller) InstallPackages(ctx context.Context, packages []str
 		return nil
 	}
 
-	sendProgress := func(progress float64, step string) {
-		if progressFunc != nil {
-			progressFunc("", progress, step, false)
-		}
+	// Start with initial progress
+	if progressFunc != nil {
+		progressFunc("", 0.05, "Initializing Zypper package installation...", false)
 	}
 
-	// Create a channel to signal completion
-	done := make(chan error, 1)
+	// Refresh repositories
+	if progressFunc != nil {
+		progressFunc("", 0.10, "Refreshing zypper repositories...", false)
+	}
+	self.log("Refreshing zypper repositories...")
 
-	// Start the installation in a goroutine
+	refreshCmd := exec.CommandContext(ctx, "zypper", "--non-interactive", "--no-gpg-checks", "refresh")
+	if output, err := refreshCmd.CombinedOutput(); err != nil {
+		self.log(fmt.Sprintf("Error refreshing zypper: %s", string(output)))
+		return fmt.Errorf("failed to refresh zypper: %w", err)
+	}
+
+	if progressFunc != nil {
+		progressFunc("", 0.25, "Completed: Refreshing zypper repositories...", false)
+	}
+
+	// Install packages with gradual progress
+	if progressFunc != nil {
+		progressFunc("", 0.30, fmt.Sprintf("Installing %d packages...", len(packages)), false)
+	}
+	self.log(fmt.Sprintf("Installing %d packages...", len(packages)))
+
+	// Start gradual progress updates
+	progressDone := make(chan struct{})
 	go func() {
-		// Refresh repositories
-		sendProgress(0.1, "Refreshing zypper repositories...")
-		refreshCmd := exec.CommandContext(ctx, "zypper", "--non-interactive", "--no-gpg-checks", "refresh")
-		if output, err := refreshCmd.CombinedOutput(); err != nil {
-			self.log(fmt.Sprintf("Error refreshing zypper: %s", string(output)))
-			done <- fmt.Errorf("failed to refresh zypper: %w", err)
-			return
+		currentProgress := 0.30
+		for currentProgress < 0.80 {
+			select {
+			case <-progressDone:
+				return
+			case <-ctx.Done():
+				return
+			default:
+				currentProgress += 0.03
+				if progressFunc != nil {
+					progressFunc("", currentProgress, fmt.Sprintf("Installing %d packages...", len(packages)), false)
+				}
+				// Sleep for gradual progress
+				select {
+				case <-progressDone:
+					return
+				case <-ctx.Done():
+					return
+				default:
+					time.Sleep(300 * time.Millisecond)
+				}
+			}
 		}
-
-		// Install packages
-		sendProgress(0.3, "Starting package installation...")
-		args := append([]string{"--non-interactive", "--no-gpg-checks", "install"}, packages...)
-		installCmd := exec.CommandContext(ctx, "zypper", args...)
-		if output, err := installCmd.CombinedOutput(); err != nil {
-			self.log(fmt.Sprintf("Error installing packages: %s", string(output)))
-			done <- fmt.Errorf("failed to install packages: %w", err)
-			return
-		}
-
-		sendProgress(0.9, "Verifying installation...")
-		done <- nil
 	}()
 
-	// Wait for completion or cancellation
-	select {
-	case <-ctx.Done():
-		self.log("Installation cancelled by user")
-		return ctx.Err()
-	case err := <-done:
-		if err == nil {
-			if progressFunc != nil {
-				progressFunc("", 1.0, "Installation complete", true)
-			}
-			self.log("Packages installed successfully")
-		}
-		return err
+	args := append([]string{"--non-interactive", "--no-gpg-checks", "install"}, packages...)
+	installCmd := exec.CommandContext(ctx, "zypper", args...)
+	output, err := installCmd.CombinedOutput()
+	close(progressDone)
+
+	if err != nil {
+		self.log(fmt.Sprintf("Error installing packages: %s", string(output)))
+		return fmt.Errorf("failed to install packages: %w", err)
 	}
+
+	if progressFunc != nil {
+		progressFunc("", 0.85, "Completed: Installing packages...", false)
+	}
+
+	// Verification step
+	if progressFunc != nil {
+		progressFunc("", 0.90, "Verifying installation...", false)
+	}
+	self.log("Verifying installation...")
+
+	// Small delay to show verification
+	time.Sleep(500 * time.Millisecond)
+
+	// Final completion
+	if progressFunc != nil {
+		progressFunc("", 1.0, "Installation complete", true)
+	}
+	self.log("Packages installed successfully")
+
+	return nil
 }
 
 // log sends a message to the log channel if available

@@ -28,29 +28,32 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 
 	// Start with proper progress reporting
 	if progressFunc != nil {
-		progressFunc("", 0.01, "Initializing package installation...", false)
+		progressFunc("", 0.05, "Initializing package installation...", false)
 	}
 
-	// Update package lists and install packages
+	// Update package lists and install packages with better progress distribution
 	steps := []struct {
-		progress float64
-		step     string
-		cmd      *exec.Cmd
+		progress    float64
+		endProgress float64
+		step        string
+		cmd         *exec.Cmd
 	}{
 		{
-			progress: 0.1,
-			step:     "Updating package lists...",
-			cmd:      exec.CommandContext(ctx, "apt-get", "update", "-y"),
+			progress:    0.10,
+			endProgress: 0.25,
+			step:        "Updating package lists...",
+			cmd:         exec.CommandContext(ctx, "apt-get", "update", "-y"),
 		},
 		{
-			progress: 0.3,
-			step:     fmt.Sprintf("Installing %d packages...", len(packages)),
-			cmd:      exec.CommandContext(ctx, "apt-get", append([]string{"install", "-y"}, packages...)...),
+			progress:    0.30,
+			endProgress: 0.85,
+			step:        fmt.Sprintf("Installing %d packages...", len(packages)),
+			cmd:         exec.CommandContext(ctx, "apt-get", append([]string{"install", "-y"}, packages...)...),
 		},
 	}
 
 	// Execute each step with progress updates
-	for i, step := range steps {
+	for _, step := range steps {
 		// Report starting this step
 		if progressFunc != nil {
 			progressFunc("", step.progress, step.step, false)
@@ -60,18 +63,19 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 		// Start a goroutine to update progress during long-running steps
 		progressDone := make(chan struct{})
 		go func(startProgress, endProgress float64, stepDesc string) {
-			ticker := time.NewTicker(200 * time.Millisecond)
+			ticker := time.NewTicker(100 * time.Millisecond) // Faster updates for smoother progress
 			defer ticker.Stop()
 
 			currentProgress := startProgress
-			endPoint := endProgress - 0.05 // Leave room for completion
+			// Calculate increment based on time - slower increments for more realistic progress
+			increment := (endProgress - startProgress) / 200 // Spread over ~20 seconds
 
 			for {
 				select {
 				case <-ticker.C:
-					// Gradually increment progress
-					if currentProgress < endPoint {
-						currentProgress += 0.02
+					// Gradually increment progress, but don't exceed end point
+					if currentProgress < endProgress-0.02 {
+						currentProgress += increment
 						if progressFunc != nil {
 							progressFunc("", currentProgress, stepDesc, false)
 						}
@@ -82,12 +86,7 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 					return
 				}
 			}
-		}(step.progress, func() float64 {
-			if i < len(steps)-1 {
-				return steps[i+1].progress
-			}
-			return 0.9
-		}(), step.step)
+		}(step.progress, step.endProgress, step.step)
 
 		// Execute the command
 		output, err := step.cmd.CombinedOutput()
@@ -99,24 +98,21 @@ func (self *AptInstaller) InstallPackages(ctx context.Context, packages []string
 			return fmt.Errorf("failed during %s: %w", step.step, err)
 		}
 
-		// Log successful completion and progress to intermediate point
+		// Log successful completion and report completion progress
 		self.log(fmt.Sprintf("Completed: %s", step.step))
-
-		// If not the last step, report an intermediate progress point
-		if i < len(steps)-1 {
-			nextStep := steps[i+1]
-			intermediateProgress := (step.progress + nextStep.progress) / 2
-			if progressFunc != nil {
-				progressFunc("", intermediateProgress, fmt.Sprintf("Completed: %s", step.step), false)
-			}
+		if progressFunc != nil {
+			progressFunc("", step.endProgress, fmt.Sprintf("Completed: %s", step.step), false)
 		}
 	}
 
-	// Final verification step
+	// Final verification step with minimal progress
 	if progressFunc != nil {
-		progressFunc("", 0.9, "Verifying installation...", false)
+		progressFunc("", 0.90, "Verifying installation...", false)
 	}
 	self.log("Verifying installation...")
+
+	// Small delay to show verification step
+	time.Sleep(500 * time.Millisecond)
 
 	// Report completion
 	if progressFunc != nil {

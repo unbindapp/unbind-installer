@@ -145,7 +145,7 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 	steps := []InstallationStep{
 		{
 			Description: "Setting system file limits",
-			Progress:    0.05,
+			Progress:    0.02,
 			Action: func(ctx context.Context) error {
 				// Set system-wide limits
 				self.log("Setting system file limits...")
@@ -169,7 +169,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Downloading K3S installation script",
-			Progress:    0.10,
+			Progress:    0.05,
 			Action: func(ctx context.Context) error {
 				self.log("Starting download of K3S installer script...")
 				downloadCmd := exec.CommandContext(ctx, "curl", "-sfL", "https://get.k3s.io", "-o", "/tmp/k3s-installer.sh")
@@ -185,7 +185,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Setting execution permissions on installer script",
-			Progress:    0.15,
+			Progress:    0.08,
 			Action: func(ctx context.Context) error {
 				chmodCmd := exec.CommandContext(ctx, "chmod", "+x", "/tmp/k3s-installer.sh")
 				chmodOutput, err := chmodCmd.CombinedOutput()
@@ -200,7 +200,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Running K3S installer",
-			Progress:    0.20,
+			Progress:    0.35, // Much larger allocation since this takes 2-3 minutes
 			Action: func(ctx context.Context) error {
 				self.log(fmt.Sprintf("Running K3S installer with flags: %s", k3sInstallFlags))
 				installCmd := exec.CommandContext(ctx, "/bin/sh", "/tmp/k3s-installer.sh")
@@ -247,7 +247,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Waiting for K3S service to become fully active",
-			Progress:    0.60,
+			Progress:    0.45,
 			Action: func(ctx context.Context) error {
 				maxRetries := 6
 				for retry := 0; retry < maxRetries; retry++ {
@@ -275,7 +275,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Installing Helm and dependencies",
-			Progress:    0.70,
+			Progress:    0.65, // Larger allocation since this can take 1-2 minutes
 			Action: func(ctx context.Context) error {
 				// Find an appropriate bin directory first
 				binPath := "/usr/local/bin"
@@ -463,7 +463,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Waiting for kubeconfig to be created",
-			Progress:    0.75,
+			Progress:    0.70,
 			Action: func(ctx context.Context) error {
 				kubeconfigPath = "/etc/rancher/k3s/k3s.yaml"
 
@@ -491,7 +491,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Installing Longhorn storage system",
-			Progress:    0.80,
+			Progress:    0.85, // Larger allocation since Longhorn installation takes significant time
 			Action: func(ctx context.Context) error {
 				// Add Longhorn Helm repo
 				self.log("Adding Longhorn Helm repository...")
@@ -574,7 +574,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Pre-fetching common container images",
-			Progress:    0.85,
+			Progress:    0.90, // Moderate allocation since this can run in parallel
 			Action: func(ctx context.Context) error {
 				// List of common images to pre-fetch
 				images := []string{
@@ -664,7 +664,7 @@ fs.inotify.max_user_instances = 2099999999`
 		},
 		{
 			Description: "Finalizing installation",
-			Progress:    0.95,
+			Progress:    0.98,
 			Action: func(ctx context.Context) error {
 				// Add KUBECONFIG to ~/.profile
 				self.log("Adding KUBECONFIG to ~/.profile...")
@@ -712,9 +712,8 @@ fs.inotify.max_user_instances = 2099999999`
 			return "", err
 		}
 
-		// Log completion of current step
-		completionMsg := fmt.Sprintf("Completed: %s", step.Description)
-		self.logProgress(step.Progress, "installing", completionMsg, nil)
+		// Don't log completion messages as they're confusing - just move to the next step
+		// The progress bar itself shows completion status
 	}
 
 	// Set end time and send final progress update

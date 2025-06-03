@@ -2,6 +2,13 @@ package pkgmanager
 
 // PackageMapping defines the mapping of common package names to distribution-specific package names
 var PackageMapping = map[string]map[string]string{
+	"tar": {
+		"ubuntu":   "tar",
+		"debian":   "tar",
+		"fedora":   "tar",
+		"centos":   "tar",
+		"opensuse": "tar",
+	},
 	"iscsiadm": {
 		"ubuntu":   "open-iscsi",
 		"debian":   "open-iscsi",

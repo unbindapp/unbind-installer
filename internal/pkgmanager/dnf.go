@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"time"
 )
 
 // DNFInstaller handles installation of dnf packages
@@ -25,54 +26,91 @@ func (self *DNFInstaller) InstallPackages(ctx context.Context, packages []string
 		return nil
 	}
 
-	sendProgress := func(progress float64, step string) {
-		if progressFunc != nil {
-			progressFunc("", progress, step, false)
-		}
+	// Start with initial progress
+	if progressFunc != nil {
+		progressFunc("", 0.05, "Initializing DNF package installation...", false)
 	}
 
-	// Create a channel to signal completion
-	done := make(chan error, 1)
+	// Update package lists
+	if progressFunc != nil {
+		progressFunc("", 0.10, "Updating DNF package lists...", false)
+	}
+	self.log("Updating DNF package lists...")
 
-	// Start the installation in a goroutine
+	updateCmd := exec.CommandContext(ctx, "dnf", "makecache", "--refresh", "-y")
+	if output, err := updateCmd.CombinedOutput(); err != nil {
+		self.log(fmt.Sprintf("Error updating dnf: %s", string(output)))
+		return fmt.Errorf("failed to update dnf: %w", err)
+	}
+
+	if progressFunc != nil {
+		progressFunc("", 0.25, "Completed: Updating DNF package lists...", false)
+	}
+
+	// Install packages with gradual progress
+	if progressFunc != nil {
+		progressFunc("", 0.30, fmt.Sprintf("Installing %d packages...", len(packages)), false)
+	}
+	self.log(fmt.Sprintf("Installing %d packages...", len(packages)))
+
+	// Start gradual progress updates
+	progressDone := make(chan struct{})
 	go func() {
-		// Update package lists
-		sendProgress(0.1, "Updating DNF package lists...")
-		updateCmd := exec.CommandContext(ctx, "dnf", "makecache", "--refresh", "-y")
-		if output, err := updateCmd.CombinedOutput(); err != nil {
-			self.log(fmt.Sprintf("Error updating dnf: %s", string(output)))
-			done <- fmt.Errorf("failed to update dnf: %w", err)
-			return
+		currentProgress := 0.30
+		for currentProgress < 0.80 {
+			select {
+			case <-progressDone:
+				return
+			case <-ctx.Done():
+				return
+			default:
+				currentProgress += 0.03
+				if progressFunc != nil {
+					progressFunc("", currentProgress, fmt.Sprintf("Installing %d packages...", len(packages)), false)
+				}
+				// Sleep for gradual progress
+				select {
+				case <-progressDone:
+					return
+				case <-ctx.Done():
+					return
+				default:
+					time.Sleep(300 * time.Millisecond)
+				}
+			}
 		}
-
-		// Install packages
-		sendProgress(0.3, "Starting package installation...")
-		args := append([]string{"install", "-y"}, packages...)
-		installCmd := exec.CommandContext(ctx, "dnf", args...)
-		if output, err := installCmd.CombinedOutput(); err != nil {
-			self.log(fmt.Sprintf("Error installing packages: %s", string(output)))
-			done <- fmt.Errorf("failed to install packages: %w", err)
-			return
-		}
-
-		sendProgress(0.9, "Verifying installation...")
-		done <- nil
 	}()
 
-	// Wait for completion or cancellation
-	select {
-	case <-ctx.Done():
-		self.log("Installation cancelled by user")
-		return ctx.Err()
-	case err := <-done:
-		if err == nil {
-			if progressFunc != nil {
-				progressFunc("", 1.0, "Installation complete", true)
-			}
-			self.log("Packages installed successfully")
-		}
-		return err
+	args := append([]string{"install", "-y"}, packages...)
+	installCmd := exec.CommandContext(ctx, "dnf", args...)
+	output, err := installCmd.CombinedOutput()
+	close(progressDone)
+
+	if err != nil {
+		self.log(fmt.Sprintf("Error installing packages: %s", string(output)))
+		return fmt.Errorf("failed to install packages: %w", err)
 	}
+
+	if progressFunc != nil {
+		progressFunc("", 0.85, "Completed: Installing packages...", false)
+	}
+
+	// Verification step
+	if progressFunc != nil {
+		progressFunc("", 0.90, "Verifying installation...", false)
+	}
+	self.log("Verifying installation...")
+
+	// Small delay to show verification
+	time.Sleep(500 * time.Millisecond)
+
+	// Final completion
+	if progressFunc != nil {
+		progressFunc("", 1.0, "Installation complete", true)
+	}
+	self.log("Packages installed successfully")
+
+	return nil
 }
 
 // log sends a message to the log channel if available

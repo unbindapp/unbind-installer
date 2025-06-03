@@ -45,7 +45,7 @@ func getBannerWithWidth(m Model, maxWidth int) string {
 	}
 
 	// Create subtitle with version
-	versionText := fmt.Sprintf("Installer v%s", m.version)
+	versionText := fmt.Sprintf("Installer %s", m.version)
 	versionStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#00cc00")).
 		Bold(true).

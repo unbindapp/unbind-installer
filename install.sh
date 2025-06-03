@@ -44,7 +44,7 @@ if [ -z "$LATEST_VERSION" ]; then
     exit 1
 fi
 
-printf "%bInstalling Unbind Installer version %s for %s...%b\n" "$GREEN" "$LATEST_VERSION" "$ARCH" "$NC"
+printf "%bInstalling Unbind Installer %s for %s...%b\n" "$GREEN" "$LATEST_VERSION" "$ARCH" "$NC"
 
 # Download and install
 TEMP_DIR=$(mktemp -d)
