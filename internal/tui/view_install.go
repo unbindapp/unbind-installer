@@ -67,14 +67,16 @@ func viewInstallingPackages(m Model) string {
 		s.WriteString("\n      ")
 	}
 
-	// Progress bar width calculation - use most of the available width
-	progressBarWidth := maxWidth - 2 // Just leave minimal margins
+	// Progress bar width calculation - use most of the available width with padding
+	progressBarWidth := maxWidth - 6 // Leave some padding on both sides
 	if progressBarWidth < 40 {
 		progressBarWidth = 40 // Ensure reasonable minimum
 	}
 
 	// Progress bar for installation
 	prog := m.styles.NewThemedProgress(progressBarWidth)
+	// Ensure the width is properly set
+	prog.Width = progressBarWidth
 	s.WriteString(prog.ViewAs(m.packageProgress.progress))
 
 	// Show completion status if complete

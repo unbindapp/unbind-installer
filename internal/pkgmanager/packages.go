@@ -2,6 +2,13 @@ package pkgmanager
 
 // PackageMapping defines the mapping of common package names to distribution-specific package names
 var PackageMapping = map[string]map[string]string{
+	"git": {
+		"ubuntu":   "git",
+		"debian":   "git",
+		"fedora":   "git",
+		"centos":   "git",
+		"opensuse": "git",
+	},
 	"curl": {
 		"ubuntu":   "curl",
 		"debian":   "curl",

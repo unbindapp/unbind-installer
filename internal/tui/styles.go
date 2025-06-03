@@ -109,9 +109,11 @@ func (s Styles) NewThemedProgress(width int) progress.Model {
 	// Create a new progress bar with themed colors and percentage display
 	prog := progress.New(
 		progress.WithDefaultGradient(), // Use the default gradient for the filled part
-		progress.WithWidth(width),      // Set the width
 		progress.WithGradient(DefaultTheme().Secondary, DefaultTheme().Accent),
 	)
+
+	// Set the width after creation (standard bubbletea pattern)
+	prog.Width = width
 
 	// Ensure percentages are shown and properly styled
 	prog.ShowPercentage = true

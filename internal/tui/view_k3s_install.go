@@ -71,8 +71,8 @@ func viewInstallingK3S(m Model) string {
 		s.WriteString("\n      ")
 	}
 
-	// Progress bar width calculation - use most of the available width
-	progressBarWidth := maxWidth - 2 // Just leave minimal margins
+	// Progress bar width calculation - use most of the available width with padding
+	progressBarWidth := maxWidth - 6 // Leave some padding on both sides
 	if progressBarWidth < 40 {
 		progressBarWidth = 40 // Ensure reasonable minimum
 	}
@@ -80,10 +80,12 @@ func viewInstallingK3S(m Model) string {
 	// Progress bar for installing K3S
 	if m.k3sProgress.Status == "installing" {
 		prog := m.styles.NewThemedProgress(progressBarWidth)
+		prog.Width = progressBarWidth
 		s.WriteString(prog.ViewAs(m.k3sProgress.Progress))
 	} else if m.k3sProgress.Status == "completed" {
 		// Show completion progress and time
 		prog := m.styles.NewThemedProgress(progressBarWidth)
+		prog.Width = progressBarWidth
 		s.WriteString(prog.ViewAs(1.0))
 
 		if !m.k3sProgress.StartTime.IsZero() && !m.k3sProgress.EndTime.IsZero() {
@@ -94,6 +96,7 @@ func viewInstallingK3S(m Model) string {
 	} else if m.k3sProgress.Status == "failed" {
 		// Show error message
 		prog := m.styles.NewThemedProgress(progressBarWidth)
+		prog.Width = progressBarWidth
 		s.WriteString(prog.ViewAs(m.k3sProgress.Progress))
 		s.WriteString(" Failed")
 
@@ -108,6 +111,7 @@ func viewInstallingK3S(m Model) string {
 	} else {
 		// Show pending progress bar (0%)
 		prog := m.styles.NewThemedProgress(progressBarWidth)
+		prog.Width = progressBarWidth
 		s.WriteString(prog.ViewAs(0.0))
 	}
 

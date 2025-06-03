@@ -78,13 +78,9 @@ func ensureMaxWidth(content string, maxWidth int) string {
 	for _, line := range lines {
 		// Check if this line contains ANSI escape sequences (styled text)
 		if strings.Contains(line, "\x1b[") {
-			// For styled text, we need to be more careful
-			// Just ensure it doesn't exceed a reasonable limit
-			if len(line) > maxWidth*2 { // Account for ANSI sequences
-				processedLines = append(processedLines, line[:maxWidth*2])
-			} else {
-				processedLines = append(processedLines, line)
-			}
+			// For styled text like progress bars, don't truncate at all
+			// Progress bars and styled content should be left as-is since we calculate their width carefully
+			processedLines = append(processedLines, line)
 		} else {
 			// For plain text, truncate if necessary
 			processedLines = append(processedLines, truncateText(line, maxWidth))

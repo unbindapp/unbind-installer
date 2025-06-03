@@ -71,8 +71,8 @@ func viewInstallingUnbind(m Model) string {
 		s.WriteString("\n      ")
 	}
 
-	// Progress bar width calculation - use most of the available width
-	progressBarWidth := maxWidth - 2 // Just leave minimal margins
+	// Progress bar width calculation - use most of the available width with padding
+	progressBarWidth := maxWidth - 6 // Leave some padding on both sides
 	if progressBarWidth < 40 {
 		progressBarWidth = 40 // Ensure reasonable minimum
 	}
@@ -80,10 +80,12 @@ func viewInstallingUnbind(m Model) string {
 	// Progress bar for installing Unbind
 	if m.unbindProgress.Status == installer.StatusInstalling {
 		prog := m.styles.NewThemedProgress(progressBarWidth)
+		prog.Width = progressBarWidth
 		s.WriteString(prog.ViewAs(m.unbindProgress.Progress))
 	} else if m.unbindProgress.Status == installer.StatusCompleted {
 		// Show completion progress and time
 		prog := m.styles.NewThemedProgress(progressBarWidth)
+		prog.Width = progressBarWidth
 		s.WriteString(prog.ViewAs(1.0))
 
 		if !m.unbindProgress.StartTime.IsZero() && !m.unbindProgress.EndTime.IsZero() {
@@ -94,6 +96,7 @@ func viewInstallingUnbind(m Model) string {
 	} else if m.unbindProgress.Status == installer.StatusFailed {
 		// Show error message
 		prog := m.styles.NewThemedProgress(progressBarWidth)
+		prog.Width = progressBarWidth
 		s.WriteString(prog.ViewAs(m.unbindProgress.Progress))
 		s.WriteString(" Failed")
 
@@ -108,6 +111,7 @@ func viewInstallingUnbind(m Model) string {
 	} else {
 		// Show pending progress bar (0%)
 		prog := m.styles.NewThemedProgress(progressBarWidth)
+		prog.Width = progressBarWidth
 		s.WriteString(prog.ViewAs(0.0))
 	}
 
