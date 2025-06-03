@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unbindapp/unbind-installer/internal/pkgmanager"
 )
 
 // viewInstallingPackages shows the packages installation screen
@@ -96,15 +97,7 @@ func viewInstallingPackages(m Model) string {
 	s.WriteString(m.styles.Bold.Render("Installing:"))
 	s.WriteString("\n")
 
-	packages := []string{
-		"curl",
-		"wget",
-		"ca-certificates",
-		"apt-transport-https",
-		"apache2-utils",
-	}
-
-	for _, pkg := range packages {
+	for _, pkg := range pkgmanager.GetDistributionPackages(m.osInfo.Distribution) {
 		bullet := m.styles.Key.Render("•")
 		pkgLine := fmt.Sprintf("%s %s", bullet, pkg)
 		pkgLines := wrapText(pkgLine, maxWidth-2)
@@ -218,14 +211,7 @@ func viewInstallComplete(m Model) string {
 	s.WriteString(m.styles.Bold.Render("Installed Packages:"))
 	s.WriteString("\n")
 
-	packages := []string{
-		"curl",
-		"wget",
-		"ca-certificates",
-		"apt-transport-https",
-	}
-
-	for _, pkg := range packages {
+	for _, pkg := range pkgmanager.GetDistributionPackages(m.osInfo.Distribution) {
 		checkmark := m.styles.Success.Render("✓")
 		pkgLine := fmt.Sprintf("%s %s", checkmark, pkg)
 		pkgLines := wrapText(pkgLine, maxWidth-2)
