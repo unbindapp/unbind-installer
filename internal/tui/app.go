@@ -310,13 +310,22 @@ func (self Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if newModel.packageProgressChan != nil {
 			cmd = tea.Batch(cmd, newModel.listenForPackageProgress())
 		}
+		if newModel.factChan != nil {
+			cmd = tea.Batch(cmd, newModel.listenForFacts())
+		}
 	case StateInstallingK3S:
 		if newModel.k3sProgressChan != nil {
 			cmd = tea.Batch(cmd, newModel.listenForK3SProgress())
 		}
+		if newModel.factChan != nil {
+			cmd = tea.Batch(cmd, newModel.listenForFacts())
+		}
 	case StateInstallingUnbind:
 		if newModel.unbindProgressChan != nil {
 			cmd = tea.Batch(cmd, newModel.listenForUnbindProgress())
+		}
+		if newModel.factChan != nil {
+			cmd = tea.Batch(cmd, newModel.listenForFacts())
 		}
 	}
 
@@ -535,12 +544,12 @@ func (self Model) listenForUnbindProgress() tea.Cmd {
 // listenForFacts returns a command that listens for educational facts
 func (self Model) listenForFacts() tea.Cmd {
 	return func() tea.Msg {
-		select {
-		case fact := <-self.factChan:
-			return factMsg{fact: fact}
-		default:
+		fact, ok := <-self.factChan
+		if !ok {
+			// Channel closed
 			return nil
 		}
+		return factMsg{fact: fact}
 	}
 }
 
@@ -549,10 +558,11 @@ var progressListenerMap = map[ApplicationState]struct {
 	pkgInstallListener    bool
 	k3sInstallListener    bool
 	unbindInstallListener bool
+	factListener          bool
 }{
-	StateInstallingPackages: {pkgInstallListener: true},
-	StateInstallingK3S:      {k3sInstallListener: true},
-	StateInstallingUnbind:   {unbindInstallListener: true},
+	StateInstallingPackages: {pkgInstallListener: true, factListener: true},
+	StateInstallingK3S:      {k3sInstallListener: true, factListener: true},
+	StateInstallingUnbind:   {unbindInstallListener: true, factListener: true},
 }
 
 // processStateUpdate is a helper function to batch common commands for state updates
@@ -577,6 +587,11 @@ func (self Model) processStateUpdate(cmd tea.Cmd, additionalCmds ...tea.Cmd) (te
 		// Unbind installation progress listener
 		if listeners.unbindInstallListener && self.unbindProgressChan != nil {
 			allCmds = append(allCmds, self.listenForUnbindProgress())
+		}
+
+		// Fact listener for installation states
+		if listeners.factListener && self.factChan != nil {
+			allCmds = append(allCmds, self.listenForFacts())
 		}
 	}
 

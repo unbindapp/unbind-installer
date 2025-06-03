@@ -1,5 +1,7 @@
 package pkgmanager
 
+import "sort"
+
 // PackageMapping defines the mapping of common package names to distribution-specific package names
 var PackageMapping = map[string]map[string]string{
 	"tar": {
@@ -68,5 +70,7 @@ func GetDistributionPackages(distribution string) []string {
 			result = append(result, distPkg)
 		}
 	}
+
+	sort.Strings(result)
 	return result
 }
