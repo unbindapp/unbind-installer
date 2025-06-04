@@ -287,7 +287,7 @@ fs.inotify.max_user_instances = 2099999999`
 					fact := self.factRotator.GetNext()
 					self.sendFact(fact)
 
-					ticker := time.NewTicker(5 * time.Second) // Show a new fact every 5 seconds
+					ticker := time.NewTicker(8 * time.Second) // Show a new fact every 8 seconds
 					defer ticker.Stop()
 
 					for {

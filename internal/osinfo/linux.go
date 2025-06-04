@@ -42,6 +42,9 @@ func readOSRelease(info *OSInfo) error {
 
 		switch key {
 		case "ID":
+			if value == "opensuse-leap" {
+				value = "opensuse"
+			}
 			info.Distribution = value
 		case "VERSION_ID":
 			info.VersionID = value
