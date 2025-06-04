@@ -206,7 +206,7 @@ func (self *Installer) sendFact(fact string) {
 
 // Install sets up k3s and returns the kubeconfig path
 func (self *Installer) Install(ctx context.Context) (string, error) {
-	k3sInstallFlags := "--disable=traefik --kubelet-arg=fail-swap-on=false"
+	k3sInstallFlags := "--disable=traefik --kubelet-arg=fail-swap-on=false --cluster-init"
 
 	var kubeconfigPath string
 
