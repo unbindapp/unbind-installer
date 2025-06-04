@@ -719,7 +719,13 @@ fs.inotify.max_user_instances = 2099999999`
 					"--set", "csi.snapshotterReplicaCount=1",
 					"--set", "longhornUI.replicas=1",
 					"--set", "persistence.reclaimPolicy=Retain",
-					"--set", "persistence.defaultClass=true")
+					"--set", "persistence.defaultClass=true",
+					"--set", "longhornConversionWebhook.replicas=1",
+					"--set", "longhornAdmissionWebhook.replicas=1",
+					"--set", "longhornRecoveryBackend.replicas=1",
+					"--set", "persistence.defaultClassReplicaCount=2",
+					"--set", "persistence.defaultDataLocality=best-effort",
+				)
 
 				// Set KUBECONFIG environment variable
 				installCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
