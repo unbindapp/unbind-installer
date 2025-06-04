@@ -16,9 +16,13 @@ var AllSupportedDistros = []string{
 	"fedora",
 	"opensuse",
 	"centos",
+	"rocky",
 }
 
 var AllSupportedDistrosVersions = map[string][]string{
+	"rocky": {
+		"9",
+	},
 	"ubuntu": {
 		"22.04",
 		"24.04",
@@ -78,6 +82,12 @@ func IsVersionSupported(distribution, version string) bool {
 		// Extract major version number
 		majorVersion := strings.Split(version, ".")[0]
 		return majorVersion >= "15"
+	}
+
+	if distribution == "rocky" {
+		// Extract major version number
+		majorVersion := strings.Split(version, ".")[0]
+		return majorVersion >= "9"
 	}
 
 	return slices.Contains(versions, version)

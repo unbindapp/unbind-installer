@@ -10,6 +10,7 @@ var PackageMapping = map[string]map[string]string{
 		"fedora":   "tar",
 		"centos":   "tar",
 		"opensuse": "tar",
+		"rocky":    "tar",
 	},
 	"iscsiadm": {
 		"ubuntu":   "open-iscsi",
@@ -17,6 +18,7 @@ var PackageMapping = map[string]map[string]string{
 		"fedora":   "iscsi-initiator-utils",
 		"centos":   "iscsi-initiator-utils",
 		"opensuse": "open-iscsi",
+		"rocky":    "iscsi-initiator-utils",
 	},
 	"git": {
 		"ubuntu":   "git",
@@ -24,6 +26,7 @@ var PackageMapping = map[string]map[string]string{
 		"fedora":   "git",
 		"centos":   "git",
 		"opensuse": "git",
+		"rocky":    "git",
 	},
 	"curl": {
 		"ubuntu":   "curl",
@@ -31,6 +34,7 @@ var PackageMapping = map[string]map[string]string{
 		"fedora":   "curl",
 		"centos":   "curl",
 		"opensuse": "curl",
+		"rocky":    "curl",
 	},
 	"wget": {
 		"ubuntu":   "wget",
@@ -38,6 +42,7 @@ var PackageMapping = map[string]map[string]string{
 		"fedora":   "wget",
 		"centos":   "wget",
 		"opensuse": "wget",
+		"rocky":    "wget",
 	},
 	"ca-certificates": {
 		"ubuntu":   "ca-certificates",
@@ -45,6 +50,7 @@ var PackageMapping = map[string]map[string]string{
 		"fedora":   "ca-certificates",
 		"centos":   "ca-certificates",
 		"opensuse": "ca-certificates",
+		"rocky":    "ca-certificates",
 	},
 	"apt-transport-https": {
 		"ubuntu":   "apt-transport-https",
@@ -52,6 +58,7 @@ var PackageMapping = map[string]map[string]string{
 		"fedora":   "", // Not needed on Fedora
 		"centos":   "", // Not needed on CentOS
 		"opensuse": "", // Not needed on OpenSUSE
+		"rocky":    "", // Not needed on Rocky
 	},
 	"apache2-utils": {
 		"ubuntu":   "apache2-utils",
@@ -59,6 +66,7 @@ var PackageMapping = map[string]map[string]string{
 		"fedora":   "httpd-tools",
 		"centos":   "httpd-tools",
 		"opensuse": "apache2-utils",
+		"rocky":    "httpd-tools",
 	},
 }
 
