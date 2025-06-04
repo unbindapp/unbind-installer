@@ -20,7 +20,7 @@ func NewPackageManager(distribution string, logChan chan<- string) (PackageManag
 	switch distribution {
 	case "ubuntu", "debian":
 		return NewAptInstaller(logChan), nil
-	case "fedora", "centos", "rocky":
+	case "fedora", "centos", "rocky", "almalinux":
 		return NewDNFInstaller(logChan), nil
 	case "opensuse":
 		return NewZypperInstaller(logChan), nil
