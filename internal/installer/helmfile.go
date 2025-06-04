@@ -23,7 +23,8 @@ var unbindInstallationFacts = []string{
 	"New deployments for services are \"rolled out\" one at a time resulting in zero or minimal downtime.",
 	"Unbind is MIT licensed and all component source code is available on GitHub.",
 	"You can add more servers to your cluster at any time, using `unbind add-node` - this will increase the compute capacity of the system.",
-	"Unbind's template system enables zero-configuration deployments of popular services such as Plausible, Ghost, N8N, Supabase, and many more.",
+	"Unbind's template system enables zero-configuration deployments of popular services such as Plausible, Ghost, N8N, Supabase, and more.",
+	"Templates can automatically generate secure passwords, JWT tokens, and configure complex service relationships without manual intervention.",
 	"You can view logs and metrics for individual services - or across entire teams, projects, and environments.",
 	"Unbind has full CI/CD capabilities to automatically build and deploy your application to any environment.",
 	"You can create variables at the team, project, environment, or service level and reference them from other services.",
@@ -31,6 +32,12 @@ var unbindInstallationFacts = []string{
 	"You can configure S3-compatible storage and automatically backup your databases.",
 	"Unbind services will be exposed on the internal, private network through a DNS-based service discovery system.",
 	"Externally exposed services are automatically secured with TLS using Let's Encrypt certificates.",
+	"Build caches are automatically stored in your container registry to speed up subsequent builds of the same application.",
+	"Unbind automatically creates Kubernetes RBAC roles and bindings that sync with your team permissions.",
+	"Database operators handle complex operations like scaling, upgrades, and maintenance automatically.",
+	"You can update to a newer version of Unbind through the web interface.",
+	"In addition to supporting multiple databases, Unbind also supports multiple versions of each database to ensure application compatibility.",
+	"Unbind's flavor of PostgreSQL includes many popular extensions out of the box - including TimescaleDB, PostGIS, and pgvector.",
 }
 
 // FactRotator manages educational facts display without repetition
