@@ -215,7 +215,7 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 		"--kubelet-arg=eviction-soft-grace-period=memory.available=2m " +
 		"--kubelet-arg=eviction-hard=memory.available<150Mi " +
 		"--kubelet-arg=eviction-minimum-reclaim=memory.available=128Mi " +
-		"--kubelet-arg=system-reserved=memory=640Mi,cpu=250m " +
+		"--kubelet-arg=system-reserved=memory=640Mi,cpu=500m " +
 		"--kubelet-arg=kube-reserved=memory=384Mi,cpu=250m"
 
 	var kubeconfigPath string
