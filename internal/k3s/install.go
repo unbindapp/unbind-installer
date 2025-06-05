@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const K3S_VERSION = "v1.33.1+k3s1"
+
 // Educational facts about the platform being installed
 var platformFacts = []string{
 	"Kubernetes (K8s) is an open-source system that keeps container-ized apps running and scales them automatically.",
@@ -311,7 +313,10 @@ fs.inotify.max_user_instances = 2099999999`
 				}()
 
 				installCmd := exec.CommandContext(ctx, "/bin/sh", "/tmp/k3s-installer.sh")
-				installCmd.Env = append(os.Environ(), fmt.Sprintf("INSTALL_K3S_EXEC=%s", k3sInstallFlags))
+				installCmd.Env = append(os.Environ(),
+					fmt.Sprintf("INSTALL_K3S_EXEC=%s", k3sInstallFlags),
+					fmt.Sprintf("INSTALL_K3S_VERSION=%s", K3S_VERSION),
+				)
 
 				installOutput, err := installCmd.CombinedOutput()
 				close(factsDone) // Stop showing facts
@@ -375,6 +380,69 @@ fs.inotify.max_user_instances = 2099999999`
 
 						serviceError := self.collectServiceDiagnostics()
 						return fmt.Errorf("K3S service failed to become active after installation: %w", serviceError)
+					}
+				}
+
+				return nil
+			},
+		},
+		{
+			Description: "Configuring K3S resource limits",
+			Progress:    0.50,
+			Action: func(ctx context.Context) error {
+				self.log("Creating systemd resource configuration for K3S...")
+
+				// Create the systemd drop-in directory
+				dropInDir := "/etc/systemd/system/k3s.service.d"
+				if err := os.MkdirAll(dropInDir, 0755); err != nil {
+					return fmt.Errorf("failed to create systemd drop-in directory: %w", err)
+				}
+
+				// Define the systemd configuration content
+				configContent := `[Service]
+MemoryAccounting=yes
+CPUAccounting=yes
+MemoryMin=1G          # hard guarantee
+MemoryLow=800M        # soft guarantee
+OOMScoreAdjust=-500   # low-priority victim, but *not* unkillable
+RestartSec=30s        # slow the restart loop
+`
+
+				// Write the configuration file
+				configPath := filepath.Join(dropInDir, "20-resource-floor.conf")
+				if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+					return fmt.Errorf("failed to write systemd configuration file: %w", err)
+				}
+
+				self.log("Reloading systemd daemon...")
+				reloadCmd := exec.CommandContext(ctx, "systemctl", "daemon-reload")
+				if output, err := reloadCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to reload systemd daemon: %w, output: %s", err, string(output))
+				}
+
+				self.log("Restarting K3S service with new resource configuration...")
+				restartCmd := exec.CommandContext(ctx, "systemctl", "restart", "k3s.service")
+				if output, err := restartCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("failed to restart K3S service: %w, output: %s", err, string(output))
+				}
+
+				// Wait for the service to become active again
+				self.log("Waiting for K3S service to restart...")
+				maxRetries := 6
+				for retry := 0; retry < maxRetries; retry++ {
+					time.Sleep(5 * time.Second)
+
+					status, err := self.checkServiceStatus()
+					if status == "active" {
+						self.log("K3S service restarted successfully with new resource configuration")
+						return nil
+					}
+
+					if retry == maxRetries-1 || status == "failed" {
+						errMsg := fmt.Sprintf("K3S service failed to restart (status: %s, error: %v)", status, err)
+						self.log(errMsg)
+						serviceError := self.collectServiceDiagnostics()
+						return fmt.Errorf("K3S service failed to restart after resource configuration: %w", serviceError)
 					}
 				}
 
