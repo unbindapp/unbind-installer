@@ -18,9 +18,10 @@ const K3S_VERSION = "v1.33.1+k3s1"
 
 // Educational facts about the platform being installed
 var platformFacts = []string{
-	"Kubernetes (K8s) is an open-source system that keeps container-ized apps running and scales them automatically.",
+	"Kubernetes open-source container orchestration system that automates deployment, scaling, and management of containerized applications.",
+	"Kubernetes uses a \"desired state\" model - you tell it what you want, and it figures out how to make it happen.",
 	"An \"operator\" is a program that can extend the functionality of a Kubernetes cluster - like a plugin.",
-	"K3s is a lightweight edition of Kubernetes packaged as a single small binary.",
+	"K3s is a lightweight \"distribution\" of Kubernetes packaged as a single small binary.",
 	"K3s can run a full cluster on devices with as little as 512 MB of RAM, even a Raspberry Pi.",
 	"K3s uses an embedded SQLite database by default, so no separate etcd cluster is required.",
 	"K3s automatically creates and renews TLS certificates to keep cluster traffic encrypted.",
@@ -32,6 +33,7 @@ var platformFacts = []string{
 	"Longhorn adds persistent, replicated block storage to your Kubernetes cluster.",
 	"Longhorn provides a web UI for creating, resizing, and restoring storage volumes.",
 	"A single command can install K3s, and the cluster typically starts in under 30 seconds.",
+	"A Kubernetes \"pod\" is the smallest deployable unit and can contain one or more containers.",
 }
 
 // FactRotator manages educational facts display without repetition
@@ -213,8 +215,8 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 		"--kubelet-arg=eviction-soft-grace-period=memory.available=2m " +
 		"--kubelet-arg=eviction-hard=memory.available<150Mi " +
 		"--kubelet-arg=eviction-minimum-reclaim=memory.available=128Mi " +
-		"--kubelet-arg=system-reserved=memory=640Mi,cpu=500m " +
-		"--kubelet-arg=kube-reserved=memory=384Mi,cpu=300m"
+		"--kubelet-arg=system-reserved=memory=640Mi,cpu=250m " +
+		"--kubelet-arg=kube-reserved=memory=384Mi,cpu=250m"
 
 	var kubeconfigPath string
 
@@ -842,65 +844,6 @@ CPUWeight=200
 				}
 
 				close(factsDone) // Stop showing facts
-				return nil
-			},
-		},
-		{
-			Description: "Pre-fetching common container images",
-			Progress:    0.90, // Moderate allocation since this can run in parallel
-			Action: func(ctx context.Context) error {
-				// List of common images to pre-fetch
-				images := []string{
-					"ghcr.io/zalando/postgres-operator:v1.14.0",
-					"ghcr.io/unbindapp/spilo:17-latest",
-					"docker.io/bitnami/valkey:8.1.1-debian-12-r0",
-					"docker.io/registry:2",
-					"registry.k8s.io/ingress-nginx/controller:v1.12.2",
-					"unbindapp/dex:master-14777142866",
-					"ghcr.io/unbindapp/kube-oidc-proxy:master-14884925050",
-				}
-
-				self.log(fmt.Sprintf("Starting pre-fetch of %d container images...", len(images)))
-
-				// Create a channel to collect errors
-				errChan := make(chan error, len(images))
-				// Create a channel to track completion
-				doneChan := make(chan struct{}, len(images))
-				// Create a semaphore to limit concurrent pulls
-				sem := make(chan struct{}, 5) // Limit to 5 concurrent pulls
-
-				// Launch goroutines for each image
-				for _, image := range images {
-					go func(img string) {
-						sem <- struct{}{}
-						defer func() {
-							<-sem
-							doneChan <- struct{}{}
-						}()
-
-						cmd := exec.CommandContext(ctx, "ctr", "images", "pull", img)
-						if output, err := cmd.CombinedOutput(); err != nil {
-							errChan <- fmt.Errorf("failed to pull image %s: %w, output: %s", img, err, string(output))
-							return
-						}
-						self.log(fmt.Sprintf("Successfully pre-fetched image: %s", img))
-					}(image)
-				}
-
-				// Wait for all goroutines to complete
-				for i := 0; i < len(images); i++ {
-					select {
-					case err := <-errChan:
-						// Silently log the error without affecting the process
-						self.log(fmt.Sprintf("Image pre-fetch failed: %v", err))
-					case <-doneChan:
-						// Image pull completed
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-				}
-
-				self.log("Container image pre-fetch completed")
 				return nil
 			},
 		},

@@ -14,17 +14,16 @@ import (
 
 // Educational facts about Unbind and the installation process
 var unbindInstallationFacts = []string{
-	"You can configure \"Webhooks\" for Discord, Slack, and more to notify you of Unbind deployments and more.",
-	"In Unbind, a \"Team\" is synonymous with a Kubernetes \"namespace\".",
+	"You can configure webhooks for Discord, Slack, and more for various events - such as when a deployment is complete.",
 	"Unbind leverages \"Railpack\" to automatically build your application, without needing to write any scripts or Dockerfiles.",
 	"When you scale a service, traffic is automatically load balanced across all instances.",
 	"New deployments for services are \"rolled out\" one at a time resulting in zero or minimal downtime.",
-	"Unbind is MIT licensed and all component source code is available on GitHub.",
-	"You can add more servers to your cluster at any time, using `unbind add-node` - this will increase the compute capacity of the system.",
-	"Unbind's template system enables zero-configuration deployments of popular services such as Plausible, Ghost, N8N, Supabase, and more.",
-	"Templates can automatically generate secure passwords, JWT tokens, and configure complex service relationships without manual intervention.",
+	"Unbind is MIT licensed and all source code is available on GitHub.",
+	"You can add more servers to your cluster at any time, using `unbind add-node` - this will increase the compute capacity of your cluster.",
+	"Unbind's template system enables zero-configuration deployments of many popular services - including Plausible, Ghost, N8N, Supabase, and more.",
+	"Templates will automatically generate secure passwords, JWT tokens, and configure complex service relationships.",
 	"You can view logs and metrics for individual services - or across entire teams, projects, and environments.",
-	"Unbind has full CI/CD capabilities to automatically build and deploy your application to any environment.",
+	"Unbind has full CI/CD capabilities to automatically build and deploy your applications.",
 	"You can create variables at the team, project, environment, or service level and reference them from other services.",
 	"By configuring Memory and CPU limits you can ensure that your services are not starved of resources.",
 	"You can configure S3-compatible storage and automatically backup your databases.",
