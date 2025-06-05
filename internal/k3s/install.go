@@ -209,11 +209,11 @@ func (self *Installer) sendFact(fact string) {
 // Install sets up k3s and returns the kubeconfig path
 func (self *Installer) Install(ctx context.Context) (string, error) {
 	k3sInstallFlags := "--disable=traefik --disable=local-storage --kubelet-arg=fail-swap-on=false " +
-		"--kubelet-arg=eviction-soft=memory.available<400Mi " +
+		"--kubelet-arg=eviction-soft=memory.available<300Mi " +
 		"--kubelet-arg=eviction-soft-grace-period=memory.available=2m " +
-		"--kubelet-arg=eviction-hard=memory.available<200Mi " +
-		"--kubelet-arg=eviction-minimum-reclaim=memory.available=256Mi " +
-		"--kubelet-arg=system-reserved=memory=768Mi,cpu=500m " +
+		"--kubelet-arg=eviction-hard=memory.available<150Mi " +
+		"--kubelet-arg=eviction-minimum-reclaim=memory.available=128Mi " +
+		"--kubelet-arg=system-reserved=memory=640Mi,cpu=500m " +
 		"--kubelet-arg=kube-reserved=memory=384Mi,cpu=300m"
 
 	var kubeconfigPath string
@@ -401,7 +401,7 @@ fs.inotify.max_user_instances = 2099999999`
 				configContent := `[Service]
 MemoryAccounting=yes
 CPUAccounting=yes
-MemoryMin=512M
+MemoryMin=384M
 MemoryLow=256M
 CPUWeight=200
 `
