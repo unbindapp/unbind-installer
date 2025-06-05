@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"math/rand"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -456,46 +454,52 @@ func (self *UnbindInstaller) SyncHelmfileWithSteps(ctx context.Context, opts Syn
 				return nil
 			},
 		},
+		{
+			Description: "Waiting for authentication services and restarting auth deployment",
+			Progress:    0.98,
+			Action: func(ctx context.Context) error {
+				namespace := "unbind-system"
+
+				// Wait for kube-oidc-proxy deployment to be ready
+				self.logProgress(dependencyName, 0.96, "Waiting for kube-oidc-proxy to be ready...", nil, StatusInstalling)
+				cmd1 := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition=available",
+					"deployment/kube-oidc-proxy", "-n", namespace, "--timeout=300s")
+				cmd1.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.kubeConfigPath))
+
+				if output, err := cmd1.CombinedOutput(); err != nil {
+					self.sendLog(fmt.Sprintf("kubectl wait kube-oidc-proxy output: %s", string(output)))
+					return fmt.Errorf("failed waiting for kube-oidc-proxy deployment: %w", err)
+				}
+				self.sendLog("kube-oidc-proxy deployment is ready")
+
+				// Wait for dex deployment to be ready
+				self.logProgress(dependencyName, 0.97, "Waiting for dex to be ready...", nil, StatusInstalling)
+				cmd2 := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition=available",
+					"deployment/dex", "-n", namespace, "--timeout=300s")
+				cmd2.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.kubeConfigPath))
+
+				if output, err := cmd2.CombinedOutput(); err != nil {
+					self.sendLog(fmt.Sprintf("kubectl wait dex output: %s", string(output)))
+					return fmt.Errorf("failed waiting for dex deployment: %w", err)
+				}
+				self.sendLog("dex deployment is ready")
+
+				// Restart unbind-auth-deployment
+				self.logProgress(dependencyName, 0.98, "Restarting unbind-auth-deployment...", nil, StatusInstalling)
+				cmd3 := exec.CommandContext(ctx, "kubectl", "rollout", "restart",
+					"deployment/unbind-auth-deployment", "-n", namespace)
+				cmd3.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", self.kubeConfigPath))
+
+				if output, err := cmd3.CombinedOutput(); err != nil {
+					self.sendLog(fmt.Sprintf("kubectl rollout restart output: %s", string(output)))
+					return fmt.Errorf("failed to restart unbind-auth-deployment: %w", err)
+				}
+				self.sendLog("unbind-auth-deployment restarted successfully")
+
+				return nil
+			},
+		},
 	})
-}
-
-// Helper function to download a file with progress updates
-func (self *UnbindInstaller) downloadFileWithProgress(url, filepath string) error {
-	// Create the file
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	// Get the data
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
-	}
-
-	// Get file size for progress reporting
-	fileSize := resp.ContentLength
-
-	// Create a progress tracker
-	counter := &writeCounter{
-		Total:         fileSize,
-		Downloaded:    int64(0),
-		Installer:     self,
-		Dependency:    "helmfile-sync",
-		LastProgress:  float64(0),
-		StartProgress: 0.01,
-		EndProgress:   0.02,
-	}
-
-	// Copy while counting progress
-	_, err = io.Copy(out, io.TeeReader(resp.Body, counter))
-	return err
 }
 
 // writeCounter counts bytes written and updates progress
