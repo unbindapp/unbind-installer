@@ -402,10 +402,10 @@ fs.inotify.max_user_instances = 2099999999`
 				configContent := `[Service]
 MemoryAccounting=yes
 CPUAccounting=yes
-MemoryMin=1G          # hard guarantee
-MemoryLow=800M        # soft guarantee
-OOMScoreAdjust=-500   # low-priority victim, but *not* unkillable
-RestartSec=30s        # slow the restart loop
+MemoryMin=1G
+MemoryLow=800M
+OOMScoreAdjust=-500
+RestartSec=30s
 `
 
 				// Write the configuration file
