@@ -210,14 +210,7 @@ func (self *Installer) sendFact(fact string) {
 // Install sets up k3s and returns the kubeconfig path
 func (self *Installer) Install(ctx context.Context) (string, error) {
 	k3sInstallFlags := "--disable=traefik --disable=local-storage " +
-		"--kubelet-arg=fail-swap-on=false --cluster-init " +
-		"--kubelet-arg=enforce-node-allocatable=pods " +
-		"--kubelet-arg=system-reserved=memory=200Mi,cpu=100m " + // OS overhead
-		"--kubelet-arg=kube-reserved=memory=1300Mi,cpu=500m " + // K3s components
-		"--kubelet-arg=eviction-hard=memory.available<100Mi " +
-		"--kubelet-arg=eviction-soft=memory.available<200Mi " +
-		"--kubelet-arg=eviction-soft-grace-period=memory.available=30s " +
-		"--kubelet-arg=max-pods=110"
+		"--kubelet-arg=fail-swap-on=false --cluster-init"
 
 	var kubeconfigPath string
 
@@ -406,6 +399,8 @@ fs.inotify.max_user_instances = 2099999999`
 MemoryAccounting=yes
 CPUAccounting=yes
 CPUWeight=200
+Environment="GOMEMLIMIT=1200MiB"
+Environment="GOGC=50"
 `
 
 				// Write the configuration file
