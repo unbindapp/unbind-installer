@@ -211,7 +211,7 @@ func (self *Installer) sendFact(fact string) {
 func (self *Installer) Install(ctx context.Context) (string, error) {
 	k3sInstallFlags := "--disable=traefik --disable=local-storage " +
 		"--kubelet-arg=fail-swap-on=false " +
-		"--kubelet-arg=memory-swap.swap-behavior=LimitedSwap " +
+		"--kubelet-arg=memory-swap-behavior=LimitedSwap " +
 		"--kubelet-arg=eviction-soft=memory.available<300Mi " +
 		"--kubelet-arg=eviction-soft-grace-period=memory.available=2m " +
 		"--kubelet-arg=eviction-hard=memory.available<150Mi " +
