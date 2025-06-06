@@ -218,7 +218,7 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 		"--kubelet-arg=eviction-minimum-reclaim=memory.available=128Mi " +
 		"--kubelet-arg=system-reserved=memory=512Mi,cpu=400m " +
 		"--kubelet-arg=kube-reserved=memory=256Mi,cpu=200m " +
-		"--datastore-endpoint=sqlite:///var/lib/rancher/k3s/server/db/state.db?_journal_mode=WAL&_synchronous=NORMAL&_cache_size=8000&_busy_timeout=30000"
+		"--datastore-endpoint=sqlite:///var/lib/rancher/k3s/server/db/state.db?_journal_mode=WAL&_synchronous=NORMAL&_cache_size=10000&_temp_store=MEMORY&_mmap_size=268435456"
 
 	var kubeconfigPath string
 
@@ -434,10 +434,12 @@ CPUAccounting=yes
 CPUWeight=200
 Environment="GOMEMLIMIT=1200MiB"
 Environment="GOGC=50"
+LimitNOFILE=65536
+LimitNPROC=65536
 `
 
 				// Remove existing configuration file
-				configPath := filepath.Join(dropInDir, "20-resource-floor.conf")
+				configPath := filepath.Join(dropInDir, "20-k3s-tuning.conf")
 				if _, err := os.Stat(configPath); err == nil {
 					if err := os.Remove(configPath); err != nil {
 						return fmt.Errorf("failed to remove existing configuration file: %w", err)
