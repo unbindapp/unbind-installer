@@ -210,7 +210,14 @@ func (self *Installer) sendFact(fact string) {
 // Install sets up k3s and returns the kubeconfig path
 func (self *Installer) Install(ctx context.Context) (string, error) {
 	k3sInstallFlags := "--disable=traefik --disable=local-storage " +
-		"--kubelet-arg=fail-swap-on=false --cluster-init"
+		"--kubelet-arg=fail-swap-on=false " +
+		"--kubelet-arg=eviction-soft=memory.available<300Mi " +
+		"--kubelet-arg=eviction-soft-grace-period=memory.available=2m " +
+		"--kubelet-arg=eviction-hard=memory.available<150Mi " +
+		"--kubelet-arg=eviction-minimum-reclaim=memory.available=128Mi " +
+		"--kubelet-arg=system-reserved=memory=512Mi,cpu=400m " +
+		"--kubelet-arg=kube-reserved=memory=256Mi,cpu=200m " +
+		"--datastore-endpoint=sqlite:///var/lib/rancher/k3s/server/db/state.db?_journal_mode=WAL&_synchronous=NORMAL&_cache_size=8000&_busy_timeout=30000"
 
 	var kubeconfigPath string
 
