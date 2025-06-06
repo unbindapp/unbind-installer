@@ -269,6 +269,10 @@ featureGates:
 memorySwap:
   swapBehavior: LimitedSwap
 `
+				// Create the directory if it doesn't exist
+				if err := os.MkdirAll("/etc/rancher/k3s", 0755); err != nil {
+					return fmt.Errorf("failed to create kubelet config directory: %w", err)
+				}
 				configPath := "/etc/rancher/k3s/kubelet-config.yaml"
 				if err := os.WriteFile(configPath, []byte(kubeletConfig), 0644); err != nil {
 					return fmt.Errorf("failed to write kubelet config file: %w", err)
