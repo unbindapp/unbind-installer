@@ -211,7 +211,7 @@ func (self *Installer) sendFact(fact string) {
 func (self *Installer) Install(ctx context.Context) (string, error) {
 	k3sInstallFlags := "--disable=traefik --disable=local-storage " +
 		"--kubelet-arg=fail-swap-on=false " +
-		"--kubelet-arg=memory-swap-behavior=LimitedSwap " +
+		"--kubelet-arg=config=/etc/rancher/k3s/kubelet-config.yaml " +
 		"--kubelet-arg=eviction-soft=memory.available<300Mi " +
 		"--kubelet-arg=eviction-soft-grace-period=memory.available=2m " +
 		"--kubelet-arg=eviction-hard=memory.available<150Mi " +
@@ -256,6 +256,27 @@ fs.inotify.max_user_instances = 2099999999`
 				return nil
 			},
 		},
+		{
+			Description: "Creating kubelet configuration file for swap support",
+			Progress:    0.04, // choose appropriate progress value
+			Action: func(ctx context.Context) error {
+				kubeletConfig := `
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+failSwapOn: false
+featureGates:
+  NodeSwap: true
+memorySwap:
+  swapBehavior: LimitedSwap
+`
+				configPath := "/etc/rancher/k3s/kubelet-config.yaml"
+				if err := os.WriteFile(configPath, []byte(kubeletConfig), 0644); err != nil {
+					return fmt.Errorf("failed to write kubelet config file: %w", err)
+				}
+				return nil
+			},
+		},
+
 		{
 			Description: "Downloading K3S installation script",
 			Progress:    0.05,
