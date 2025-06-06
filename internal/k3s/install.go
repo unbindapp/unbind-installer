@@ -403,8 +403,15 @@ Environment="GOMEMLIMIT=1200MiB"
 Environment="GOGC=50"
 `
 
-				// Write the configuration file
+				// Remove existing configuration file
 				configPath := filepath.Join(dropInDir, "20-resource-floor.conf")
+				if _, err := os.Stat(configPath); err == nil {
+					if err := os.Remove(configPath); err != nil {
+						return fmt.Errorf("failed to remove existing configuration file: %w", err)
+					}
+				}
+
+				// Write the configuration file
 				if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 					return fmt.Errorf("failed to write systemd configuration file: %w", err)
 				}
