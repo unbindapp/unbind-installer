@@ -145,6 +145,16 @@ handle_add_node() {
         exit 1
     fi
 
+    # Get the current K3s version (keep the full version including +k3s1)
+    k3s_version=$(k3s --version 2>/dev/null | head -n1 | awk '{print $3}')
+    if [ -z "$k3s_version" ]; then
+        print_banner
+        print_box "Warning: Could not detect K3s version." "$YELLOW"
+        echo -e "${YELLOW}The command below will install the latest version of K3s.${NC}"
+        echo -e "${YELLOW}If you need a specific version, add INSTALL_K3S_VERSION=<version> to the command.${NC}"
+        echo ""
+    fi
+
     # Get the server URL from config file
     if [ ! -f "$CONFIG_FILE" ]; then
         print_banner
@@ -167,7 +177,16 @@ handle_add_node() {
     print_box "Add Node Instructions" "$BLUE"
     echo -e "${BOLD}To add a new node to your Unbind cluster, run the following command on the new server:${NC}"
     echo ""
-    echo -e "${CYAN}curl -sfL https://get.k3s.io | K3S_URL=$server_url K3S_TOKEN=$token sh -${NC}"
+    
+    # Build the command with version if available
+    if [ -n "$k3s_version" ]; then
+        echo -e "${CYAN}curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$k3s_version K3S_URL=$server_url K3S_TOKEN=$token sh -${NC}"
+        echo ""
+        echo -e "${GREEN}This will install K3s version: $k3s_version${NC}"
+    else
+        echo -e "${CYAN}curl -sfL https://get.k3s.io | K3S_URL=$server_url K3S_TOKEN=$token sh -${NC}"
+    fi
+    
     echo ""
     echo -e "${YELLOW}Note:${NC} Make sure the new server can reach this server on port 6443"
 }
