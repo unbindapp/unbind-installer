@@ -401,10 +401,24 @@ func CreateSwapFile(sizeGB int, logChan chan<- string) error {
 		logChan <- "Swap entry already exists in fstab or a conflicting entry was found. Skipping append."
 	}
 
+	// Calculate min_free_kbytes
+	minFreeKbytes, err := calculateMinFreeKbytes(logChan)
+	if err != nil {
+		logChan <- fmt.Sprintf("Warning: Failed to calculate min_free_kbytes: %v", err)
+	}
+
 	// Apply Sysctl Settings
 	desiredSettings := map[string]string{
-		"vm.swappiness":         "1",  // Recommended for K8s
-		"vm.vfs_cache_pressure": "50", // Common tuning parameter
+		"vm.swappiness":             "1",  // Recommended for K8s
+		"vm.vfs_cache_pressure":     "50", // Common tuning parameter
+		"vm.watermark_scale_factor": "10",
+		"vm.overcommit_memory":      "1",
+		"vm.overcommit_ratio":       "80",
+		"vm.dirty_ratio":            "15",
+		"vm.dirty_background_ratio": "5",
+	}
+	if minFreeKbytes != "" {
+		desiredSettings["vm.min_free_kbytes"] = minFreeKbytes
 	}
 	if err := applySysctlSettings(logChan, desiredSettings, sysctlConfPath); err != nil {
 		// Log as a warning, swap creation itself succeeded
@@ -414,4 +428,61 @@ func CreateSwapFile(sizeGB int, logChan chan<- string) error {
 
 	logChan <- "Swap file created, activated, and tuned successfully."
 	return nil
+}
+
+// Calculate swap min_free_kbytes as 1-2% of total RAM
+func calculateMinFreeKbytes(logChan chan<- string) (string, error) {
+	// Read total memory from /proc/meminfo
+	file, err := os.Open("/proc/meminfo")
+	if err != nil {
+		return "", fmt.Errorf("failed to open /proc/meminfo: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	var totalMemKB uint64
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "MemTotal:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				totalMemKB, err = strconv.ParseUint(fields[1], 10, 64)
+				if err != nil {
+					return "", fmt.Errorf("failed to parse MemTotal: %w", err)
+				}
+				break
+			}
+		}
+	}
+
+	if totalMemKB == 0 {
+		return "", fmt.Errorf("could not find MemTotal in /proc/meminfo")
+	}
+
+	var percentage float64
+	if totalMemKB > 4*1024*1024 { // >4GB
+		percentage = 0.01 // 1%
+	} else {
+		percentage = 0.02 // 2%
+	}
+
+	minFreeKB := uint64(float64(totalMemKB) * percentage)
+
+	// Set boundaries
+	const minAbsolute = 16384  // 16MB minimum
+	const maxAbsolute = 262144 // 256MB maximum
+
+	if minFreeKB < minAbsolute {
+		minFreeKB = minAbsolute
+	} else if minFreeKB > maxAbsolute {
+		minFreeKB = maxAbsolute
+	}
+
+	if logChan != nil {
+		logChan <- fmt.Sprintf("Calculated min_free_kbytes: %d KB (%.1f%% of %d KB total RAM)",
+			minFreeKB, percentage*100, totalMemKB)
+	}
+
+	return strconv.FormatUint(minFreeKB, 10), nil
 }
