@@ -402,8 +402,10 @@ fs.inotify.max_user_instances = 2099999999`
 MemoryAccounting=yes
 CPUAccounting=yes
 MemoryMin=768M
-MemoryMax=1G
-CPUQuota=25%
+MemoryHigh=1400M
+MemoryMax=1850M
+CPUWeight=200
+CPUQuota=60%
 `
 
 				// Write the configuration file
