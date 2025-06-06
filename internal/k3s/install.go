@@ -23,7 +23,6 @@ var platformFacts = []string{
 	"An \"operator\" is a program that can extend the functionality of a Kubernetes cluster - like a plugin.",
 	"K3s is a lightweight \"distribution\" of Kubernetes packaged as a single small binary.",
 	"K3s can run a full cluster on devices with as little as 512 MB of RAM, even a Raspberry Pi.",
-	"K3s uses an embedded SQLite database by default, so no separate etcd cluster is required.",
 	"K3s automatically creates and renews TLS certificates to keep cluster traffic encrypted.",
 	"K3s supports both x86-64 and ARM CPUs, covering PCs, cloud VMs, and IoT boards.",
 	"K3s runs containers with containerd instead of Docker for a lighter footprint.",
@@ -214,10 +213,11 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 		"--kubelet-arg=fail-swap-on=false --cluster-init " +
 		"--kubelet-arg=enforce-node-allocatable=pods " +
 		"--kubelet-arg=system-reserved=memory=200Mi,cpu=100m " + // OS overhead
-		"--kubelet-arg=kube-reserved=memory=300Mi,cpu=200m " + // K3s components
-		"--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<5% " +
+		"--kubelet-arg=kube-reserved=memory=1300Mi,cpu=500m " + // K3s components
+		"--kubelet-arg=eviction-hard=memory.available<100Mi " +
 		"--kubelet-arg=eviction-soft=memory.available<200Mi " +
-		"--kubelet-arg=eviction-soft-grace-period=memory.available=30s"
+		"--kubelet-arg=eviction-soft-grace-period=memory.available=30s " +
+		"--kubelet-arg=max-pods=110"
 
 	var kubeconfigPath string
 
@@ -405,11 +405,7 @@ fs.inotify.max_user_instances = 2099999999`
 				configContent := `[Service]
 MemoryAccounting=yes
 CPUAccounting=yes
-MemoryMin=768M
-MemoryMax=1.5G 
-MemoryHigh=1.2G 
 CPUWeight=200
-CPUQuota=50%
 `
 
 				// Write the configuration file
