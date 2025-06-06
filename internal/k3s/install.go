@@ -775,6 +775,8 @@ Environment="GOGC=50"
 					"--namespace", "longhorn-system",
 					"--create-namespace",
 					"--version", "1.9.0",
+					"--set", "defaultSettings.admissionWebhookTimeout=30",
+					"--set", "defaultSettings.conversionWebhookTimeout=30",
 					"--set", "defaultSettings.defaultReplicaCount=1",
 					"--set", "defaultSettings.replicaSoftAntiAffinity=true",
 					"--set", "defaultSettings.replicaAutoBalance=disabled",
