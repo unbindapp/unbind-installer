@@ -211,7 +211,7 @@ func (self *Installer) sendFact(fact string) {
 // Install sets up k3s and returns the kubeconfig path
 func (self *Installer) Install(ctx context.Context) (string, error) {
 	k3sInstallFlags := "--disable=traefik --disable=local-storage --kubelet-arg=fail-swap-on=false --cluster-init " +
-		"--kubelet-arg=enforce-node-allocatable=pods,system-reserved,kube-reserved " +
+		"--kubelet-arg=enforce-node-allocatable=pods " +
 		"--kubelet-arg=system-reserved=memory=512Mi,cpu=300m " +
 		"--kubelet-arg=kube-reserved=memory=512Mi,cpu=200m"
 
