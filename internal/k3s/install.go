@@ -218,7 +218,25 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 		"--kubelet-arg=eviction-minimum-reclaim=memory.available=128Mi " +
 		"--kubelet-arg=system-reserved=memory=512Mi,cpu=400m " +
 		"--kubelet-arg=kube-reserved=memory=256Mi,cpu=200m " +
-		"--datastore-endpoint=sqlite:///var/lib/rancher/k3s/server/db/state.db?_journal_mode=WAL&_synchronous=NORMAL&_cache_size=10000&_temp_store=MEMORY&_mmap_size=268435456"
+		"--kubelet-arg=image-gc-high-threshold=85 " +
+		"--kubelet-arg=image-gc-low-threshold=80 " +
+		"--kube-controller-manager-arg=terminated-pod-gc-threshold=10 " +
+		"--kube-apiserver-arg=max-requests-inflight=100 " +
+		"--kube-apiserver-arg=max-mutating-requests-inflight=50 " +
+		"--kube-apiserver-arg=watch-cache=true " +
+		"--kube-apiserver-arg=default-watch-cache-size=100 " +
+		"--kube-apiserver-arg=event-ttl=10m " +
+		"--kube-apiserver-arg=audit-log-maxage=7 " +
+		"--kube-apiserver-arg=audit-log-maxbackup=3 " +
+		"--kube-apiserver-arg=audit-log-maxsize=50 " +
+		"--datastore-endpoint=sqlite:///var/lib/rancher/k3s/server/db/state.db?" +
+		"_journal_mode=WAL&" +
+		"_synchronous=NORMAL&" +
+		"_cache_size=20000&" +
+		"_temp_store=MEMORY" +
+		"&_mmap_size=134217728&" +
+		"%_page_size=4096&" +
+		"_wal_checkpoint=PASSIVE"
 
 	var kubeconfigPath string
 
@@ -239,12 +257,19 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 				self.log("Setting system file limits...")
 
 				// Set system-wide limits via sysctl
-				sysctlContent := `net.netfilter.nf_conntrack_max=262144
+				sysctlContent := `net.netfilter.nf_conntrack_max=131072
+net.core.netdev_max_backlog=1000
+net.ipv4.tcp_max_syn_backlog=1024
+net.core.somaxconn=1024
+net.ipv4.tcp_keepalive_time=600
+net.ipv4.tcp_keepalive_intvl=60
+net.ipv4.tcp_keepalive_probes=6
+net.ipv4.tcp_fin_timeout=30
 fs.file-max = 65535
-fs.inotify.max_user_watches = 2099999999
-fs.inotify.max_user_instances = 2099999999`
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512`
 
-				if err := os.WriteFile("/etc/sysctl.d/99-k3s-file-limits.conf", []byte(sysctlContent), 0644); err != nil {
+				if err := os.WriteFile("/etc/sysctl.d/99-k3s-tuning.conf", []byte(sysctlContent), 0644); err != nil {
 					self.log(fmt.Sprintf("Warning: Could not write sysctl config: %v", err))
 				}
 				// Apply sysctl settings
@@ -432,8 +457,9 @@ memorySwap:
 MemoryAccounting=yes
 CPUAccounting=yes
 CPUWeight=200
-Environment="GOMEMLIMIT=1200MiB"
-Environment="GOGC=50"
+Environment="GOMEMLIMIT=1024MiB"
+Environment="GOGC=60"
+Environment="GODEBUG=madvdontneed=0,gctrace=0"
 LimitNOFILE=65536
 LimitNPROC=65536
 `
@@ -834,8 +860,8 @@ LimitNPROC=65536
 					"--set", "enablePSP=false",
 					"--set", "longhornDriverDeployer.enabled=false",
 					"--set", "driver.debug=false",
-					"--set", "longhornManager.resources.requests.cpu=20m",
-					"--set", "longhornManager.resources.requests.memory=64Mi",
+					"--set", "longhornManager.resources.requests.cpu=50m",
+					"--set", "longhornManager.resources.requests.memory=128Mi",
 					"--set", "longhornManager.resources.limits.cpu=100m",
 					"--set", "longhornManager.resources.limits.memory=256Mi",
 					"--set", "instanceManager.resources.requests.cpu=40m",
