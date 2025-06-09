@@ -19,7 +19,7 @@ const K3S_VERSION = "v1.33.1+k3s1"
 // Educational facts about the platform being installed
 var platformFacts = []string{
 	"Kubernetes open-source container orchestration system that automates deployment, scaling, and management of containerized applications.",
-	"Kubernetes uses a \"desired state\" model - you tell it what you want, and it figures out how to make it happen.",
+	"Kubernetes uses a \"desired state\" model - you tell it what you want, and it will continuously work to achieve that state.",
 	"An \"operator\" is a program that can extend the functionality of a Kubernetes cluster - like a plugin.",
 	"K3s is a lightweight \"distribution\" of Kubernetes packaged as a single small binary.",
 	"K3s can run a full cluster on devices with as little as 512 MB of RAM, even a Raspberry Pi.",
