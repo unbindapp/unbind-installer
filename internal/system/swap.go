@@ -15,7 +15,7 @@ import (
 
 const swapFilePath = "/swapfile"
 const fstabPath = "/etc/fstab"
-const sysctlConfPath = "/etc/sysctl.d/99-unbind-k3s-tuning.conf" // Dedicated conf file
+const sysctlConfPath = "/etc/sysctl.d/99-swap-tuning.conf" // Dedicated conf file
 
 func runCommand(logChan chan<- string, name string, args ...string) (string, error) {
 	cmdStr := name + " " + strings.Join(args, " ")

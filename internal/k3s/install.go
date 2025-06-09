@@ -233,9 +233,9 @@ func (self *Installer) Install(ctx context.Context) (string, error) {
 		"_journal_mode=WAL&" +
 		"_synchronous=NORMAL&" +
 		"_cache_size=20000&" +
-		"_temp_store=MEMORY" +
-		"&_mmap_size=134217728&" +
-		"%_page_size=4096&" +
+		"_temp_store=MEMORY&" +
+		"_mmap_size=134217728&" +
+		"_page_size=4096&" +
 		"_wal_checkpoint=PASSIVE"
 
 	var kubeconfigPath string
